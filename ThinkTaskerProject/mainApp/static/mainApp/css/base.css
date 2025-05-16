@@ -1,0 +1,85 @@
+/* Reset and basics */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f8f9fa;
+}
+
+.app-header a {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #343a40;
+}
+
+/* Fixed minimalist header */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: #ffffff;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  z-index: 1000;
+  font-weight: 500;
+}
+
+.app-content {
+  margin-top: 60px;
+  margin-left: 250px;
+  width: calc(100% - 250px);
+  padding: 2rem;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+
+/* Sidebar */
+.app-sidebar {
+  position: fixed;
+  top: 60px;
+  width: 250px;
+  height: calc(100vh - 60px);
+  background-color: #333;
+  color: #f8f9fa;
+  padding: 1rem 1rem 1rem 2rem;
+  overflow-y: auto;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+
+/* Sidebar nav links */
+.app-sidebar .nav-link {
+  color: #f8f9fa;
+  font-size: 0.95rem;
+  font-weight: 500;
+  display: block;
+  transition: background-color 0.2s ease;
+  border-radius: 6px;
+}
+
+.app-sidebar .nav-link.active,
+.app-sidebar .nav-link:hover {
+  background-color: #495057;
+  color: #fff;
+}
+
+/* Responsive: hide sidebar on small screen */
+@media (max-width: 768px) {
+  .app-sidebar {
+    display: none;
+  }
+}
+
+html, body {
+    overflow-x: hidden;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}

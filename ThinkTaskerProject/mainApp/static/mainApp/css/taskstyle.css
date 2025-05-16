@@ -1,0 +1,74 @@
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 0;
+  box-sizing: border-box;
+}
+
+.column {
+  flex: 0 0 calc((100% - 2rem) / 3); /* Subtract 2 * 1rem gaps */
+  max-width: calc((100% - 2rem) / 3);
+  background-color: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Stack vertically on smaller screens */
+@media (max-width: 992px) {
+  .column {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+/* Drag-over indicator */
+.column.drag-over {
+    background-color: #f1f3f5;
+    border: 2px dashed #6c757d;
+}
+
+/* Task card styling */
+.task-card {
+    background: #f8f9fa;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.9rem;
+    margin-bottom: 1rem;
+    cursor: grab;
+    transition: box-shadow 0.3s ease;
+}
+
+.task-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.task-card:active {
+    cursor: grabbing;
+}
+
+/* Priority colors */
+.priority-low {
+    color: #198754;
+}
+
+.priority-medium {
+    color: #ffc107;
+}
+
+.priority-high {
+    color: #dc3545;
+}
+
+/* Description and deadline font */
+.task-description,
+.task-deadline,
+.task-priority {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+

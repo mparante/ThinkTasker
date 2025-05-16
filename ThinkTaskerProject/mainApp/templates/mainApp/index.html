@@ -1,0 +1,89 @@
+{% extends "mainApp/base_generic.html" %}
+{% load static %}
+
+{% block head %}
+    <link rel="stylesheet" href="{% static 'mainApp/css/taskstyle.css' %}">
+    <script src="{% static 'mainApp/js/dragdrop.js' %}"></script>
+{% endblock %}
+
+{% block title %}ThinkTasker: Home{% endblock %}
+{% block content %}
+
+<div class="board">
+    <!-- To-Do Column -->
+    <div class="column" id="to-do" ondragover="allowDrop(event)" ondrop="drop(event, 'to-do')">
+        <h3>To-Do</h3>
+            {% if todo_tasks %}
+                {% for task in todo_tasks %}
+                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                    <h4>{{ task.title }}</h4>
+                    <p class="task-description">{{ task.description }}</p>
+                    {% if task.deadline_date %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
+                    {% endif %}
+                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No tasks</p>
+            {% endif %}
+    </div>
+
+    <!-- Ongoing Column -->
+    <div class="column" id="ongoing" ondragover="allowDrop(event)" ondrop="drop(event, 'ongoing')">
+        <h3>Ongoing</h3>
+            {% if ongoing_tasks %}
+                {% for task in ongoing_tasks %}
+                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                    <h4>{{ task.title }}</h4>
+                    <p class="task-description">{{ task.description }}</p>
+                    {% if task.deadline_date %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
+                    {% endif %}
+                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No tasks</p>
+            {% endif %}
+    </div>
+
+    <!-- Completed Column -->
+    <div class="column" id="completed" ondragover="allowDrop(event)" ondrop="drop(event, 'completed')">
+        <h3>Completed</h3>
+            {% if completed_tasks %}
+                {% for task in completed_tasks %}
+                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                    <h4>{{ task.title }}</h4>
+                    <p class="task-description">{{ task.description }}</p>
+                    {% if task.deadline_date %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
+                    {% endif %}
+                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p>No tasks</p>
+            {% endif %}
+    </div>
+
+<!-- Modal -->
+<div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h1 class="modal-title fs-5" id="exampleModalLabel">Modal title</h1>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        ...
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
