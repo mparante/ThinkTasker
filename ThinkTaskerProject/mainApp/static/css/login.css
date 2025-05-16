@@ -1,0 +1,52 @@
+/* Container: full-height flex row */
+.login-page-container {
+  display: flex;
+  height: 100vh;
+  margin: 0;
+}
+
+/* LEFT: 70% with your calendar/bg image */
+.login-image {
+  flex: 0 0 70%;
+  background: url('../img/calendar-bg.png') center/cover no-repeat;
+}
+
+/* RIGHT: 30% dark panel */
+.login-panel {
+  flex: 0 0 30%;
+  background-color: #2d2d2d;
+  padding: 2rem 1.5rem;
+}
+
+/* Title styling */
+.login-title {
+  color: #ffffff;
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+/* Register button */
+.register-btn {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+/* Outline‐style login buttons */
+.login-btn {
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 0.65rem 1rem;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.login-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
+}
+
+/* Lighter text helper */
+.text-light-50 {
+  color: rgba(255, 255, 255, 0.6) !important;
+}

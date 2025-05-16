@@ -121,3 +121,11 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Azure AD / Microsoft Graph settings
+GRAPH_TENANT_ID     = "79ccab09-2e72-4d04-b1cb-73e545129843"
+GRAPH_CLIENT_ID     = "2128f7a1-0646-4768-978c-a43b8f0a6453"
+GRAPH_CLIENT_SECRET = ".B28Q~TWsNsp4yauHcUP0l_knx.UIQYkOWwzjc8Z"
+GRAPH_REDIRECT_URI = "http://localhost:8000/graph/callback/"
+GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
+GRAPH_SCOPE         = ["User.Read", "Mail.Read"]
