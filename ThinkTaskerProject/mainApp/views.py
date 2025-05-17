@@ -109,3 +109,44 @@ def graph_callback(request):
         return redirect("dashboard")
     else:
         return render(request, "error.html", {"message": result.get("error_description")})
+    
+def _get_graph_token(request):
+    token_dict = request.session.get("graph_token")
+    if not token_dict:
+        return None
+    return token_dict.get("access_token")
+
+def profile(request):
+    """Show a simple profile page with name & email."""
+    access_token = _get_graph_token(request)
+    if not access_token:
+        return redirect("login")
+
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    
+    graph_endpoint = "https://graph.microsoft.com/v1.0/me"
+    resp = requests.get(graph_endpoint, headers=headers)
+    resp.raise_for_status()
+    user = resp.json()
+
+    return render(request, "profile.html", {"user": user})
+
+def profile_photo(request):
+    """Proxy the user’s photo from Graph so we can <img src="{% url 'profile-photo' %}">."""
+    access_token = _get_graph_token(request)
+    if not access_token:
+        return HttpResponse(status=401)
+
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    photo_endpoint = "https://graph.microsoft.com/v1.0/me/photo/$value"
+    resp = requests.get(photo_endpoint, headers=headers, stream=True)
+    if resp.status_code == 200:
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        return HttpResponse(resp.content, content_type=content_type)
+    else:
+        # fallback to a default avatar or 404
+        return HttpResponse(status=404)
