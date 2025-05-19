@@ -24,15 +24,61 @@
         </div>
     </header>
     
-    <div class="app-sidebar"> 
+    <!-- <div class="app-sidebar"> 
         <a href="/" class="d-flex align-items-center mb-3 mb-md-0 me-md-auto text-white text-decoration-none"><span class="fs-4">Dashboard</span> </a> <hr> 
         <ul class="nav nav-pills flex-column mb-auto"> 
         <li class="nav-item"> <a href="#" class="nav-link active" aria-current="page">Tasks</a> </li>         
         <li> <a href="#" class="nav-link text-white">Calendar</a> </li> 
         <li> <a href="#" class="nav-link text-white">Priority View</a> </li> 
-        <li> <a href="#" class="nav-link text-white">From Outlook</a> </li> 
+        <li> <a class="nav-link text-white" href="{% url 'outlook-inbox' %}">Outlook Inbox</a> </li> 
         <li> <a href="#" class="nav-link text-white">Settings</a> </li> </ul> 
         <hr> 
+        
+        <div class="dropdown"> 
+            <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"> 
+            <img src="{% static 'img/avatar.png' %}" alt="" width="32" height="32" class="rounded-circle me-2">Account</a> 
+            <ul class="dropdown-menu dropdown-menu-dark text-small shadow"> 
+                <li><a class="dropdown-item" href="#">Settings</a></li> 
+                <li><a class="dropdown-item" href="#">Help & Docs</a></li> 
+                <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
+                <li><hr class="dropdown-divider"></li> 
+                <li><a class="dropdown-item" href="#">Sign out</a></li> </ul> 
+        </div> 
+    </div> -->
+
+    <div class="app-sidebar">
+        <ul class="nav nav-pills flex-column mb-auto">
+        <li class="nav-item">
+            <a href="{% url 'dashboard' %}"
+            class="nav-link {% if request.resolver_match.url_name == 'index' %}active{% endif %}">
+            Tasks
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="#"
+            class="nav-link {% if request.resolver_match.url_name == 'calendar' %}active{% endif %}">
+            Calendar
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="#"
+            class="nav-link {% if request.resolver_match.url_name == 'priority-view' %}active{% endif %}">
+            Priority View
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="{% url 'outlook-inbox' %}"
+            class="nav-link {% if request.resolver_match.url_name == 'outlook-inbox' %}active{% endif %}">
+            From Outlook
+            </a>
+        </li>
+        <li class="nav-item">
+            <a href="#"
+            class="nav-link {% if request.resolver_match.url_name == 'settings' %}active{% endif %}">
+            Settings
+            </a>
+        </li>
+        </ul>
         
         <div class="dropdown"> 
             <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"> 

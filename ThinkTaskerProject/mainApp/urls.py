@@ -9,5 +9,5 @@ urlpatterns = [
     path('graph/login/', views.graph_login, name='graph-login'),
     path('graph/callback/', views.graph_callback, name='graph-callback'),
     path("profile/", views.profile, name="profile"),
-    path("profile/photo/", views.profile_photo, name="profile-photo"),
+    path("outlook/", views.outlook_inbox, name="outlook-inbox"),
 ]

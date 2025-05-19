@@ -1,0 +1,26 @@
+{% extends "base_generic.html" %}
+{% load static %}
+
+{% block title %}Outlook Inbox{% endblock %}
+
+{% block content %}
+  <h2 class="mb-4">My Outlook Inbox</h2>
+  <div class="board">
+    {% if emails %}
+      {% for email in emails %}
+        <div class="task-card">
+          <h4>{{ email.subject }}</h4>
+          <p class="task-description">{{ email.preview }}</p>
+          <p class="task-deadline">
+            <strong>Received:</strong> {{ email.received|date:"M d, Y H:i" }}
+            {% if email.actionable %}
+              <span class="badge bg-success ms-2">Actionable</span>
+            {% endif %}
+          </p>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p>No emails fetched (are you signed in?).</p>
+    {% endif %}
+  </div>
+{% endblock %}
