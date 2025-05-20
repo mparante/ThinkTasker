@@ -1,9 +1,11 @@
 import msal, uuid, requests
+import spacy, re
 from django.shortcuts import render, redirect
 from django.http import HttpResponse
 from django.conf import settings
 from bs4 import BeautifulSoup
-import spacy
+from .models import ActionablePattern
+from datetime import datetime
 
 # This is the english language model for spaCy, a natural language processing library.
 # It is used for processing and analyzing text data.
@@ -80,7 +82,13 @@ def _build_msal_app(cache=None):
         token_cache = cache
     )
 
-# This function fetches the user's most recent Outlook messages using Microsoft Graph API.
+# This function retrieves all active patterns from the database.
+# It filters the ActionablePattern model to get only those patterns that are marked as active.
+# The function returns a queryset of active patterns.
+def get_active_patterns():
+    return ActionablePattern.objects.filter(is_active=True)
+
+# This function returns a list of the user's most recent UNREAD Outlook messages as dicts.
 # It uses the access token stored in the session to make a request to the API.
 # If the token is not found, it returns an empty list.
 # The function constructs the URL for the API request, including the number of messages to fetch and the fields to select.
@@ -96,9 +104,10 @@ def fetch_emails(request, top=20):
 
     url = (
         "https://graph.microsoft.com/v1.0/"
-        f"me/mailFolders/Inbox/messages"
+        "me/mailFolders/Inbox/messages"
         f"?$top={top}"
-        "&$select=subject,bodyPreview,receivedDateTime"
+        "&$filter=isRead eq false"
+        "&$select=subject,bodyPreview,receivedDateTime,from,isRead"
     )
 
     resp = requests.get(url, headers=headers)
@@ -106,18 +115,42 @@ def fetch_emails(request, top=20):
         return resp.json().get("value", [])
     else:
         return []
+    
 
-# This function checks if the text contains actionable items.
-# It uses a list of keywords to identify actionable items.
-# The function converts the text to lowercase and checks for the presence of any of the keywords.
-# If any keyword is found, it returns True, indicating that the text contains actionable items.
+# This function marks an email as read in the user's Outlook inbox after fetch_emails function is called.   
+# def mark_email_as_read(request, message_id):
+#     access_token = _get_graph_token(request)
+#     if not access_token:
+#         return False
+#     headers = {
+#         "Authorization": f"Bearer {access_token}",
+#         "Content-Type": "application/json"
+#     }
+#     url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}"
+#     data = {"isRead": True}
+#     resp = requests.patch(url, headers=headers, json=data)
+#     return resp.status_code == 200
+
+# This function extracts actionable items from the given text.
+# It uses the active patterns from the database to identify words, phrases, or regex patterns that indicate an actionable item.
+# The function iterates through the patterns and checks if any of them match the text.
+# If a match is found, the pattern is added to the list of found patterns.
+# The function returns a list of found patterns.
 def extract_actionable_items(text):
-    action_keywords = ["submit", "review", "approve", "finalize", "schedule", "update", "attend", "send", "urgent", "follow-up", "deadline"]
-    doc = nlp(text.lower())
-    for kw in action_keywords:
-        if kw in text.lower():
-            return True
-    return False
+    patterns = ActionablePattern.objects.filter(is_active=True)
+    found_patterns = []
+    for pattern in patterns:
+        if pattern.pattern_type == 'word':
+            # word boundary, case insensitive
+            if re.search(rf'\b{re.escape(pattern.pattern)}\b', text, re.IGNORECASE):
+                found_patterns.append(pattern)
+        elif pattern.pattern_type == 'phrase':
+            if pattern.pattern.lower() in text.lower():
+                found_patterns.append(pattern)
+        elif pattern.pattern_type == 'regex':
+            if re.search(pattern.pattern, text, re.IGNORECASE):
+                found_patterns.append(pattern)
+    return found_patterns
 
 # This function renders the login page.
 # It is called when the user accesses the login URL.
@@ -215,15 +248,32 @@ def outlook_inbox(request):
         for m in raw_messages:
             subject = m.get("subject", "")
             preview = m.get("bodyPreview", "")
-            actionable = extract_actionable_items(subject + " " + preview)
+            actionable_items = extract_actionable_items(subject + " " + preview)
             emails.append({
                 "id": m["id"],
                 "subject": subject,
                 "preview": preview,
-                "received": m.get("receivedDateTime"),
-                "actionable": actionable,
+                "received": parse_iso_datetime(m.get("receivedDateTime")),
+                "actionable_items": [
+                    {"pattern": pat.pattern, "priority": pat.priority} for pat in actionable_items
+                ],
             })
+            print(m.get("receivedDateTime"))
+            # mark_email_as_read(request, m["id"])
     else:
         emails = []
 
     return render(request, "emails.html", {"emails": emails})
+
+#This function parses an ISO 8601 formatted date string.
+# It converts the string into a datetime object.
+# If the string is empty or None, it returns None.
+# If the string cannot be parsed, it prints an error message and returns None.
+def parse_iso_datetime(dt_str):
+    if not dt_str:
+        return None
+    try:
+        return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%SZ")
+    except Exception as e:
+        print("Error parsing date:", dt_str, e)
+        return None

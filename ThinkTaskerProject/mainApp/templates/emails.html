@@ -4,23 +4,36 @@
 {% block title %}Outlook Inbox{% endblock %}
 
 {% block content %}
-  <h2 class="mb-4">My Outlook Inbox</h2>
-  <div class="board">
-    {% if emails %}
-      {% for email in emails %}
-        <div class="task-card">
-          <h4>{{ email.subject }}</h4>
-          <p class="task-description">{{ email.preview }}</p>
-          <p class="task-deadline">
-            <strong>Received:</strong> {{ email.received|date:"M d, Y H:i" }}
-            {% if email.actionable %}
-              <span class="badge bg-success ms-2">Actionable</span>
-            {% endif %}
-          </p>
+<h2 class="mb-4">Unread Inbox Mail</h2>
+<div class="board">
+  {% if emails %}
+    {% for email in emails %}
+      <div class="task-card mb-4 p-4 shadow-sm rounded" style="background: #fff;">
+        <h4 class="mb-2">{{ email.subject }}</h4>
+        <div class="mb-2 text-secondary small">
+          <strong>Received:</strong>
+          <span>{{ email.received|date:"M d, Y H:i" }}</span>
         </div>
-      {% endfor %}
-    {% else %}
-      <p>No emails fetched (are you signed in?).</p>
-    {% endif %}
-  </div>
+        <p class="task-description mb-3">{{ email.preview }}</p>
+        
+        {% if email.actionable_items %}
+          <div class="mb-2">
+            <span class="badge bg-success fw-semibold px-3 py-2 mb-2" style="font-size: 1rem;">
+              Actionable
+            </span>
+            <div class="mt-2">
+              {% for item in email.actionable_items %}
+                <span class="badge bg-light text-dark border me-1 mb-1" style="font-size:1rem; font-weight:bold;">
+                  {{ item.pattern }}
+                </span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>No emails fetched (are you signed in?).</p>
+  {% endif %}
+</div>
 {% endblock %}
