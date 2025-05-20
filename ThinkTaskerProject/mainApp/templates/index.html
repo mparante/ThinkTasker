@@ -13,77 +13,92 @@
     <!-- To-Do Column -->
     <div class="column" id="to-do" ondragover="allowDrop(event)" ondrop="drop(event, 'to-do')">
         <h3>To-Do</h3>
-            {% if todo_tasks %}
-                {% for task in todo_tasks %}
-                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                    <h4>{{ task.title }}</h4>
-                    <p class="task-description">{{ task.description }}</p>
-                    {% if task.deadline_date %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
-                    {% endif %}
-                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p>No tasks</p>
-            {% endif %}
+        {% if todo_tasks %}
+            {% for task in todo_tasks %}
+            <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                <h4>{{ task.subject }}</h4>
+                <p class="task-description">{{ task.body_preview }}</p>
+                {% if task.deadline %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                {% endif %}
+                <p class="task-priority">
+                    <strong>Priority:</strong>
+                    <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
+                </p>
+                {% if task.actionable_patterns %}
+                    <div class="mt-2">
+                        <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
+                        {% for pat in task.actionable_patterns %}
+                            <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No tasks</p>
+        {% endif %}
     </div>
 
     <!-- Ongoing Column -->
     <div class="column" id="ongoing" ondragover="allowDrop(event)" ondrop="drop(event, 'ongoing')">
         <h3>Ongoing</h3>
-            {% if ongoing_tasks %}
-                {% for task in ongoing_tasks %}
-                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                    <h4>{{ task.title }}</h4>
-                    <p class="task-description">{{ task.description }}</p>
-                    {% if task.deadline_date %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
-                    {% endif %}
-                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p>No tasks</p>
-            {% endif %}
+        {% if ongoing_tasks %}
+            {% for task in ongoing_tasks %}
+            <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                <h4>{{ task.subject }}</h4>
+                <p class="task-description">{{ task.body_preview }}</p>
+                {% if task.deadline %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                {% endif %}
+                <p class="task-priority">
+                    <strong>Priority:</strong>
+                    <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
+                </p>
+                {% if task.actionable_patterns %}
+                    <div class="mt-2">
+                        <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
+                        {% for pat in task.actionable_patterns %}
+                            <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No tasks</p>
+        {% endif %}
     </div>
 
     <!-- Completed Column -->
     <div class="column" id="completed" ondragover="allowDrop(event)" ondrop="drop(event, 'completed')">
         <h3>Completed</h3>
-            {% if completed_tasks %}
-                {% for task in completed_tasks %}
-                <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                    <h4>{{ task.title }}</h4>
-                    <p class="task-description">{{ task.description }}</p>
-                    {% if task.deadline_date %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline_date }}</p>
-                    {% endif %}
-                    <p class="task-priority"><strong>Priority:</strong> <span class="priority-{{ task.priority|lower }}">{{ task.priority }}</span></p>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p>No tasks</p>
-            {% endif %}
+        {% if completed_tasks %}
+            {% for task in completed_tasks %}
+            <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                <h4>{{ task.subject }}</h4>
+                <p class="task-description">{{ task.body_preview }}</p>
+                {% if task.deadline %}
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                {% endif %}
+                <p class="task-priority">
+                    <strong>Priority:</strong>
+                    <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
+                </p>
+                {% if task.actionable_patterns %}
+                    <div class="mt-2">
+                        <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
+                        {% for pat in task.actionable_patterns %}
+                            <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p>No tasks</p>
+        {% endif %}
     </div>
-
-<!-- Modal -->
-<div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h1 class="modal-title fs-5" id="exampleModalLabel">Modal title</h1>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        ...
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary">Save changes</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 {% endblock %}

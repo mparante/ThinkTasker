@@ -5,10 +5,10 @@
   margin: 0;
 }
 
-/* LEFT: 70% with your calendar/bg image */
+/* LEFT: 70% with your bg image */
 .login-image {
   flex: 0 0 70%;
-  background: url('../img/calendar-bg.png') center/cover no-repeat;
+  background: url('../img/Canyon-Sparks_1280x800.png') right center/cover no-repeat;
 }
 
 /* RIGHT: 30% dark panel */

@@ -10,4 +10,5 @@ urlpatterns = [
     path('graph/callback/', views.graph_callback, name='graph-callback'),
     path("profile/", views.profile, name="profile"),
     path("outlook/", views.outlook_inbox, name="outlook-inbox"),
+    path("emails/sync/", views.sync_emails_view, name="sync-emails"),
 ]

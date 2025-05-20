@@ -1,74 +1,33 @@
-import msal, uuid, requests
-import spacy, re
+import msal, uuid, requests, spacy, re, json
 from django.shortcuts import render, redirect
-from django.http import HttpResponse
 from django.conf import settings
-from bs4 import BeautifulSoup
-from .models import ActionablePattern
+from django.utils.dateparse import parse_datetime
+from django.contrib import messages
+from .models import ActionablePattern, ExtractedTask, ProcessedEmail
 from datetime import datetime
 
 # This is the english language model for spaCy, a natural language processing library.
 # It is used for processing and analyzing text data.
 nlp = spacy.load("en_core_web_sm")
 
-stubTasks = [
-        {
-        'id': 1,
-        'title': 'Task #1',
-        'description': 'This is the description of Task #1',
-        'completed': False,
-        'ongoing': False,
-        'priority': 'High',
-        'deadline_date': None,
-        },
-        {
-        'id': 2,
-        'title': 'Task #2',
-        'description': 'This is the description of Task #2',
-        'completed': False,
-        'ongoing': True,
-        'priority': 'High',
-        'deadline_date': None,
-        },
-        {
-        'id': 3,
-        'title': 'Task #3',
-        'description': 'This is the description of Task #3',
-        'completed': False,
-        'ongoing': True,
-        'priority': 'High',
-        'deadline_date': None,
-        },
-        {
-        'id': 4,
-        'title': 'Task #4',
-        'description': 'This is the description of Task #4',
-        'completed': False,
-        'ongoing': False,
-        'priority': 'High',
-        'deadline_date': None,
-        },
-        {
-        'id':53,
-        'title': 'Task #5',
-        'description': 'This is the description of Task #5',
-        'completed': True,
-        'ongoing': False,
-        'priority': 'High',
-        'deadline_date': None,
-        },
-    ]
-
 # This function renders the main dashboard page.
 # It retrieves the list of tasks and categorizes them into three groups: todo, ongoing, and completed.
 # The tasks are filtered based on their status and passed to the template for rendering.
-# The function uses a stub list of tasks for demonstration purposes.
 def index(request):
-    tasks = stubTasks if settings.DEBUG else []
+    # Query only tasks that came from actionable processed emails
+    actionable_tasks = ExtractedTask.objects.filter(
+        processed_emails__is_actionable=True
+    ).distinct()
+
+    # Categorize tasks based on status (adjust as needed)
+    todo_tasks = actionable_tasks.filter(status="Open")
+    ongoing_tasks = actionable_tasks.filter(status="Ongoing")
+    completed_tasks = actionable_tasks.filter(status="Completed")
+
     context = {
-        'todo_tasks': [t for t in tasks if not t['completed'] and not t['ongoing']],
-        'ongoing_tasks': [t for t in tasks if t['ongoing'] and not t['completed']],
-        'completed_tasks': [t for t in tasks if t['completed']],
+        'todo_tasks': todo_tasks,
+        'ongoing_tasks': ongoing_tasks,
+        'completed_tasks': completed_tasks,
     }
     return render(request, 'index.html', context)
 
@@ -107,15 +66,14 @@ def fetch_emails(request, top=20):
         "me/mailFolders/Inbox/messages"
         f"?$top={top}"
         "&$filter=isRead eq false"
-        "&$select=subject,bodyPreview,receivedDateTime,from,isRead"
+        "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink"
     )
 
     resp = requests.get(url, headers=headers)
     if resp.status_code == 200:
         return resp.json().get("value", [])
     else:
-        return []
-    
+        return []    
 
 # This function marks an email as read in the user's Outlook inbox after fetch_emails function is called.   
 # def mark_email_as_read(request, message_id):
@@ -237,33 +195,73 @@ def profile(request):
     return render(request, "profile.html", {"user": user})
 
 # This function retrieves the user's Outlook inbox messages.
-# It uses the access token stored in the session to make a request to the Microsoft Graph API.
-# If the token is not found, it returns an empty list.
-# The function fetches the most recent messages and extracts actionable items from the subject and preview text.
-def outlook_inbox(request):
-    access_token = _get_graph_token(request)
-    if access_token:
-        raw_messages = fetch_emails(request, top=20)
-        emails = []
-        for m in raw_messages:
-            subject = m.get("subject", "")
-            preview = m.get("bodyPreview", "")
-            actionable_items = extract_actionable_items(subject + " " + preview)
-            emails.append({
-                "id": m["id"],
-                "subject": subject,
-                "preview": preview,
-                "received": parse_iso_datetime(m.get("receivedDateTime")),
-                "actionable_items": [
-                    {"pattern": pat.pattern, "priority": pat.priority} for pat in actionable_items
-                ],
-            })
-            print(m.get("receivedDateTime"))
-            # mark_email_as_read(request, m["id"])
-    else:
-        emails = []
+# It uses the access token stored in the session to make a request to the API.
+# If the token is not found, it redirects to the login page.
+# If the request is successful, it processes the messages to extract actionable items.
+# It saves the processed emails and extracted tasks in the database.
+# The function renders the emails page with the list of emails and their actionable items.
+# The emails are displayed in a list format, showing the subject, preview, and received date.
+# The function also checks if the email has already been processed to avoid duplicates.
+# The actionable items are extracted using the extract_actionable_items function. 
+# def outlook_inbox(request):
+#     access_token = _get_graph_token(request)
+#     emails = []
+#     if access_token:
+#         raw_messages = fetch_emails(request, top=20)
+#         if not raw_messages:
+#             print("No emails found.")
 
-    return render(request, "emails.html", {"emails": emails})
+#         for m in raw_messages:
+#             subject = m.get("subject", "")
+#             preview = m.get("bodyPreview", "")
+#             message_id = m["id"]
+#             # Check if email has been processed
+#             if ProcessedEmail.objects.filter(message_id=message_id).exists():
+#                 continue
+
+#             # Find actionable patterns
+#             actionable_patterns = extract_actionable_items(subject + " " + preview)
+#             actionable_list = [{"pattern": p.pattern, "priority": p.priority} for p in actionable_patterns]
+#             is_actionable = bool(actionable_patterns)
+
+#             # Save ProcessedEmail record
+#             pe = ProcessedEmail.objects.create(
+#                 message_id=message_id,
+#                 subject=subject,
+#                 is_actionable=is_actionable,
+#             )
+
+#             # If actionable, save as task if not already
+#             extracted_task = None
+#             if is_actionable:
+#                 priority = next((p.priority for p in actionable_patterns if p.priority), "")
+#                 extracted_task, created = ExtractedTask.objects.get_or_create(
+#                     email_id=message_id,
+#                     defaults={
+#                         "subject": subject,
+#                         "body_preview": preview,
+#                         "actionable_patterns": actionable_list,
+#                         "priority": priority,
+#                         "status": "Open",
+#                     },
+#                 )
+#                 if extracted_task:
+#                     pe.task = extracted_task
+#                     pe.save()
+
+#             # Compose for display
+#             emails.append({
+#                 "id": message_id,
+#                 "subject": subject,
+#                 "preview": preview,
+#                 "received": parse_datetime(m.get("receivedDateTime")),
+#                 "actionable_items": actionable_list,
+#             })
+#     return render(request, "emails.html", {"emails": emails})
+
+def outlook_inbox(request):
+    processed_emails = ProcessedEmail.objects.all().order_by('-processed_at')
+    return render(request, "emails.html", {"processed_emails": processed_emails})
 
 #This function parses an ISO 8601 formatted date string.
 # It converts the string into a datetime object.
@@ -277,3 +275,46 @@ def parse_iso_datetime(dt_str):
     except Exception as e:
         print("Error parsing date:", dt_str, e)
         return None
+
+def sync_emails_view(request):
+    access_token = _get_graph_token(request)
+    if access_token:
+        raw_messages = fetch_emails(request, top=20)
+        for m in raw_messages:            
+            print("Full message dict:", m)
+            print("webLink:", m.get("webLink"))
+            subject = m.get("subject", "")
+            preview = m.get("bodyPreview", "")
+            message_id = m["id"]
+            if ProcessedEmail.objects.filter(message_id=message_id).exists():
+                continue
+
+            actionable_patterns = extract_actionable_items(subject + " " + preview)
+            actionable_list = [{"pattern": p.pattern, "priority": p.priority} for p in actionable_patterns]
+            is_actionable = bool(actionable_patterns)
+            web_link = m.get("webLink")
+            
+            pe = ProcessedEmail.objects.create(
+                message_id=message_id,
+                subject=subject,
+                is_actionable=is_actionable,
+                web_link=web_link,
+            )
+
+            if is_actionable:
+                priority = next((p.priority for p in actionable_patterns if p.priority), "")
+                extracted_task, created = ExtractedTask.objects.get_or_create(
+                    email_id=message_id,
+                    defaults={
+                        "subject": subject,
+                        "body_preview": preview,
+                        "actionable_patterns": actionable_list,
+                        "priority": priority,
+                        "status": "Open",
+                    },
+                )
+                if extracted_task:
+                    pe.task = extracted_task
+                    pe.save()
+    messages.success(request, "Synced latest emails from Outlook.")
+    return redirect("outlook-inbox")
