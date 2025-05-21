@@ -1,52 +1,170 @@
-/* Container: full-height flex row */
 .login-page-container {
   display: flex;
   height: 100vh;
   margin: 0;
+  font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
 }
 
-/* LEFT: 70% with your bg image */
 .login-image {
   flex: 0 0 70%;
   background: url('../img/Canyon-Sparks_1280x800.png') right center/cover no-repeat;
 }
 
-/* RIGHT: 30% dark panel */
 .login-panel {
   flex: 0 0 30%;
-  background-color: #2d2d2d;
-  padding: 2rem 1.5rem;
+  background-color: #23272f;
+  padding: 3.2rem 2.2rem 2.2rem 2.2rem;
+  min-width: 330px;
+  border-radius: 0; 
+  box-shadow: 0 8px 44px 0 rgba(44,44,44,0.08);
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Title styling */
 .login-title {
-  color: #ffffff;
-  font-size: 2.5rem;
+  color: #fff;
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
   margin-bottom: 2rem;
+  font-family: inherit;
 }
 
-/* Register button */
-.register-btn {
+.login-panel .alert {
   width: 100%;
-  font-size: 1rem;
-  padding: 0.75rem 1rem;
+  margin-top: 1.2em;
+  padding: 0.75em 1.2em;
+  border-radius: 5px;
+  font-size: 1.07em;
+  text-align: center;
+  background: #fff6f5;
+  color: #d7263d;
+  border: 1px solid #f2b6b6;
+}
+.login-panel .alert-success {
+  background: #edfcef;
+  color: #228d40;
+  border-color: #b2f0b2;
+}
+.login-panel .alert-info {
+  background: #e9f6fe;
+  color: #186db2;
+  border-color: #a9d7f6;
 }
 
-/* Outline‐style login buttons */
+.register-btn, .btn-danger.register-btn {
+  width: 100%;
+  font-size: 1.08rem;
+  padding: 0.8rem 1rem;
+  background-color: #e2231a !important;
+  border: none !important;
+  color: #fff !important;
+  border-radius: 6px !important;
+  font-weight: 600;
+  box-shadow: 0 3px 10px rgba(226,35,26,0.06);
+  transition: background 0.17s;
+}
+
+.register-btn:hover { 
+  background-color: #b71c12 !important; 
+}
+
 .login-btn {
   width: 100%;
-  font-size: 1.1rem;
-  padding: 0.65rem 1rem;
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.6);
+  font-size: 1.08rem;
+  padding: 0.72rem 1rem;
+  color: #fff;
+  background: none;
+  border: 1.4px solid rgba(255,255,255,0.32);
+  border-radius: 6px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  transition: all 0.16s;
 }
 
-.login-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: #ffffff;
+.login-btn:hover, .login-btn:focus {
+  background: rgba(255,255,255,0.12);
+  color: #e2231a;
+  border-color: #fff;
 }
 
-/* Lighter text helper */
-.text-light-50 {
-  color: rgba(255, 255, 255, 0.6) !important;
+.mt-auto, .text-light-50.small {
+  color: rgba(255,255,255,0.6) !important;
+  font-size: 0.95rem !important;
+  margin-top: auto;
+}
+
+.modal-content {
+  border-radius: 0 !important;
+}
+
+.shadow-sm { 
+  box-shadow: 0 1.5px 7px rgba(44,44,44,0.05); 
+}
+
+@media (max-width: 992px) {
+  .login-panel {
+    min-width: unset;
+    padding: 2.1rem 0.8rem;
+    border-radius: 0;
+  }
+  .login-image {
+    display: none;
+  }
+}
+
+.login-modal-content, .register-modal-content {
+  border-radius: 0 !important;
+  background: #23272f !important;
+  color: #fff;
+  font-family: inherit;
+}
+
+.login-modal-content .form-label,
+.register-modal-content .form-label {
+  color: #eee;
+  font-size: 1.04rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+.login-modal-content .form-control,
+.register-modal-content .form-control {
+  background: #181a1e;
+  color: #fff;
+  border-radius: 5px;
+  font-size: 1rem;
+  border: 1px solid #34383e;
+  margin-bottom: 0.15rem;
+}
+
+.login-modal-content .form-control:focus,
+.register-modal-content .form-control:focus {
+  border-color: #276ef1;
+  box-shadow: 0 0 0 1px #276ef1;
+}
+
+.signin-btn-lg, .register-btn-lg {
+  background: #276ef1 !important;
+  border: none !important;
+  font-size: 1.14rem;
+  padding: 0.88rem 1rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  border-radius: 5px !important;
+  margin-top: 5px;
+  transition: background .15s;
+}
+
+.signin-btn-lg:hover, .register-btn-lg:hover { 
+  background: #1757c2 !important; 
+}
+
+.text-lenovo { 
+  color: #e2231a; 
+  font-weight: 700; 
 }

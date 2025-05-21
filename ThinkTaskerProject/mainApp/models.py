@@ -1,4 +1,17 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.conf import settings
+
+# This model is used to store user information.
+# It extends the AbstractUser model to include an is_approved field.
+# The is_approved field is used to indicate if the user has been approved for access to the system.
+# The model is used to manage user accounts and their approval status in the database.
+class ThinkTaskerUser(AbstractUser):
+    is_approved = models.BooleanField(default=False)
+    department = models.CharField(max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return self.email or self.username
 
 # This is the model used to store actionable patterns.
 # It includes the pattern itself, the type of pattern (word, phrase, regex), a label for the pattern,
@@ -33,6 +46,7 @@ class ActionablePattern(models.Model):
 # The is_new field is used to indicate if the email is new and has not been processed before.
 # The model is used to manage processed emails and their associated tasks in the database.
 class ProcessedEmail(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="processed_emails")    
     message_id = models.CharField(max_length=256, unique=True)
     subject = models.CharField(max_length=512)
     body_preview = models.TextField(blank=True, null=True)

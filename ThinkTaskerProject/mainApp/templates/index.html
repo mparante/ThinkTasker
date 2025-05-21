@@ -42,7 +42,7 @@
             </div>
             {% endfor %}
         {% else %}
-            <p>No tasks</p>
+            <p class="no-tasks-message">No tasks</p>
         {% endif %}
     </div>
 
@@ -78,7 +78,7 @@
             </div>
             {% endfor %}
         {% else %}
-            <p>No tasks</p>
+            <p class="no-tasks-message">No tasks</p>
         {% endif %}
     </div>
 
@@ -87,7 +87,7 @@
         <h3>Completed</h3>
         {% if completed_tasks %}
             {% for task in completed_tasks %}
-            <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+            <div class="task-card completed" id="task-{{ task.id }}" draggable="false">
                 <h4>
                   {% if task.email %}
                     <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
@@ -114,7 +114,7 @@
             </div>
             {% endfor %}
         {% else %}
-            <p>No tasks</p>
+            <p class="no-tasks-message">No tasks</p>
         {% endif %}
     </div>
 </div>

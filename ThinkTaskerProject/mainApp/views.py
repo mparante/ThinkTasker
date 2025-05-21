@@ -1,9 +1,11 @@
-import msal, uuid, requests, spacy, re, json
+import msal, uuid, requests, spacy, re
 from django.shortcuts import render, redirect
 from django.conf import settings
-from django.utils.dateparse import parse_datetime
 from django.contrib import messages
-from .models import ActionablePattern, ExtractedTask, ProcessedEmail
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth import authenticate, login
+from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser
 from datetime import datetime
 
 # This is the english language model for spaCy, a natural language processing library.
@@ -32,18 +34,60 @@ def login_view(request):
     return render(request, 'login.html')
 
 # This function handles the login for non-Lenovo users.
+# It checks if the request method is POST and retrieves the email and password from the request.
+# It then authenticates the user using the Django authentication system.
+# If the user is authenticated and approved, it logs the user in and redirects to the dashboard.
+# If the user is not approved, it displays an error message and redirects to the login page.
 def nonlenovo_login(request):
     if request.method == 'POST':
-        # TODO: authenticate & redirect
-        return redirect('dashboard')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+
+        user = authenticate(request, username=email, password=password)
+        if user is not None:
+            if user.is_approved:
+                login(request, user)
+                return redirect('dashboard')
+            else:
+                messages.error(request, "Your account is not yet approved by admin.")
+                return redirect('login')
+        else:
+            messages.error(request, "Invalid credentials.")
+            return redirect('login')
     return redirect('login')
 
-# Registration view for non-Lenovo users
+# This function handles the registration of new users.
+# It checks if the email is already registered and creates a new user if not.
+# It sets the username to the email and the password to the provided password.
+# The user is marked as active but not approved.
+# After successful registration, a success message is displayed and the user is redirected to the login page.
 def register(request):
     if request.method == 'POST':
-        # TODO: validate, create user, redirect
+        email = request.POST.get('email')
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
+        department = request.POST.get('department')
+        username = email
+
+        if ThinkTaskerUser.objects.filter(email=email).exists():
+            messages.error(request, "Email already registered.")
+            return redirect('login')
+        
+        user = ThinkTaskerUser.objects.create_user(
+            username=username,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            department=department,
+            is_active=True,
+            is_approved=False,
+        )
+        user.save()
+
+        messages.success(request, "Registration successful! Await admin approval.")
         return redirect('login')
     return redirect('login')
+
 
 # This function retrieves the user's profile information from Microsoft Graph API.
 # It uses the access token stored in the session to make a request to the API.
@@ -80,13 +124,18 @@ def graph_login(request):
     )
     return redirect(auth_url)
 
-# Callback view for Microsoft Graph API
-# This function handles the response from Microsoft after the user has logged in.
-# It exchanges the authorization code for an access token.
-# If successful, it stores the token in the session and redirects to the dashboard.
+# This function handles the callback from Microsoft Graph API after the user has logged in.
+# It retrieves the authorization code from the request and exchanges it for an access token.
+# It then uses the access token to fetch the user's profile information from Microsoft Graph API.
+# If the user is found in the database, it logs them in and redirects to the dashboard.
+# If the user is not found, it renders the login page with the user's email and name.
+from django.contrib import messages
+from django.contrib.auth import login
+
 def graph_callback(request):
     if request.GET.get("state") != request.session.get("msal_state"):
         return render(request, "error.html", {"message": "State mismatch."})
+
     code = request.GET.get("code")
     msal_app = _build_msal_app()
     result = msal_app.acquire_token_by_authorization_code(
@@ -94,9 +143,29 @@ def graph_callback(request):
         scopes = settings.GRAPH_SCOPE,
         redirect_uri = settings.GRAPH_REDIRECT_URI
     )
+
     if "access_token" in result:
-        request.session["graph_token"] = result
-        return redirect("dashboard")
+        access_token = result["access_token"]
+        headers = {"Authorization": f"Bearer {access_token}"}
+        user_resp = requests.get("https://graph.microsoft.com/v1.0/me", headers=headers)
+        userinfo = user_resp.json()
+        email = userinfo.get("mail") or userinfo.get("userPrincipalName")
+
+        try:
+            user = ThinkTaskerUser.objects.get(email=email)
+            if not user.is_approved:
+                messages.error(request, "Your account is not approved by admin yet.")
+                return redirect('login')
+            login(request, user)
+            request.session["graph_token"] = result
+            return redirect("dashboard")
+        except ThinkTaskerUser.DoesNotExist:
+            return render(request, "login.html", {
+                "show_register": True,
+                "ms_email": email,
+                "ms_first_name": userinfo.get("givenName", ""),
+                "ms_last_name": userinfo.get("surname", ""),
+            })
     else:
         return render(request, "error.html", {"message": result.get("error_description")})
 
@@ -250,3 +319,25 @@ def sync_emails_view(request):
                 )
     messages.success(request, "Synced latest emails from Outlook.")
     return redirect("outlook-inbox")
+
+# This function updates the status of a task based on the provided task ID and new status.
+# It uses the POST method to receive the task ID and new status from the request.
+# If the request method is POST, it retrieves the task ID and new status from the request.
+# It then tries to find the task in the database using the task ID.
+# If the task is found, it updates the status and saves the task.
+# If the task is not found, it returns a JSON response indicating failure.
+# If the request method is not POST, it returns a JSON response indicating an invalid request.
+# The function returns a JSON response indicating success or failure.
+@csrf_exempt
+def update_task_status(request):
+    if request.method == "POST":
+        task_id = request.POST.get("task_id")
+        new_status = request.POST.get("new_status")
+        try:
+            task = ExtractedTask.objects.get(id=task_id)
+            task.status = new_status
+            task.save()
+            return JsonResponse({"success": True})
+        except ExtractedTask.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Task not found"})
+    return JsonResponse({"success": False, "error": "Invalid request"})

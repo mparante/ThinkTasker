@@ -130,3 +130,5 @@ GRAPH_CLIENT_SECRET = ".B28Q~TWsNsp4yauHcUP0l_knx.UIQYkOWwzjc8Z"
 GRAPH_REDIRECT_URI = "http://localhost:8000/graph/callback/"
 GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
 GRAPH_SCOPE         = ["User.Read", "Mail.Read"]
+
+AUTH_USER_MODEL = 'mainApp.ThinkTaskerUser'

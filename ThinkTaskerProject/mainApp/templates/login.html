@@ -5,12 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login – ThinkTasker</title>
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-    integrity="sha384-..."
-    crossorigin="anonymous">
-  <link href="{% static 'css/base.css' %}" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="{% static 'css/login.css' %}" rel="stylesheet">
 </head>
 <body class="login-page-container">
@@ -18,109 +13,77 @@
   <!-- LEFT: background image -->
   <div class="login-image"></div>
 
-  <!-- RIGHT: dark panel -->
-  <div class="login-panel d-flex flex-column align-items-center">
+  <!-- RIGHT: panel -->
+  <div class="login-panel d-flex flex-column align-items-center justify-content-center">
+    <h1 class="login-title mb-4">ThinkTasker</h1>
 
-    <!-- Title -->
-    <h1 class="login-title">ThinkTasker</h1>
-
-    <!-- Register button -->
-    <a href="#"
-       class="btn btn-primary register-btn mb-3"
-       data-bs-toggle="modal"
-       data-bs-target="#registerModal">
-      Don’t have an account? Register New User
+    <!-- Sign in with Microsoft -->
+    <a href="{% url 'graph-login' %}" class="btn btn-primary w-100 mb-2 login-btn shadow-sm" style="font-size:1.15rem;">
+      <img src="{% static 'img/msft-logo.svg' %}" alt="Microsoft" style="width:22px;vertical-align:middle;margin-right:7px;opacity:0.85;">
+      Sign in with Microsoft
     </a>
-
-    <!-- Lenovo login -->
-    <a href="{% url 'graph-login' %}"
-       class="btn btn-outline-light login-btn mb-2">
-      Lenovo Users
-    </a>
-
-    <!-- Non-Lenovo login -->
-    <button type="button"
-            class="btn btn-outline-light login-btn mb-2"
-            data-bs-toggle="modal"
-            data-bs-target="#nonLenovoModal">
-      Non-Lenovo Users
-    </button>
-
-    <!-- Version -->
-    <div class="mt-auto mb-0 text-light-50 small">v1.0.0</div>
-  </div>
-
-  <!-- Modals -->
-  <div class="modal fade" id="nonLenovoModal" tabindex="-1">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-      <div class="modal-content">
-        <form method="post" action="{% url 'nonlenovo-login' %}">
-          {% csrf_token %}
-          <div class="modal-header">
-            <h5 class="modal-title">Non-Lenovo Sign In</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label for="emailNL" class="form-label">Email</label>
-              <input id="emailNL" name="email" type="email"
-                     class="form-control" required>
-            </div>
-            <div class="mb-3">
-              <label for="passwordNL" class="form-label">Password</label>
-              <input id="passwordNL" name="password" type="password"
-                     class="form-control" required>
-            </div>
-          </div>
-          <div class="modal-footer p-2">
-            <button type="submit" class="btn btn-primary w-100">
-              Sign In
-            </button>
-          </div>
-        </form>
-      </div>
+    <div class="w-100 mt-3 text-center small text-light-50">
+      Only approved users can access ThinkTasker.<br>
+      Not registered yet? You’ll be prompted to register after signing in.
     </div>
+    
+      {% if messages and not show_register %}
+        <div class="container mt-2">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      
+    <div class="mt-auto mb-2 text-light-50 small">v1.0.0</div>
   </div>
 
-  <div class="modal fade" id="registerModal" tabindex="-1">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
-      <div class="modal-content">
+  <!-- Registration Modal (hidden unless triggered after Microsoft login) -->
+  {% if show_register %}
+  <div class="modal show" tabindex="-1" style="display:block; background:rgba(0,0,0,0.45);">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content register-modal-content border-0 rounded-4">
         <form method="post" action="{% url 'register' %}">
           {% csrf_token %}
-          <div class="modal-header">
-            <h5 class="modal-title">Register</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <div class="modal-header border-0 pb-0">
+            <h3 class="modal-title w-100 text-center fw-bold mb-1" style="font-size:1.6rem;">
+              <span class="text-lenovo">Register for ThinkTasker</span>
+            </h3>
           </div>
-          <div class="modal-body">
+          <div class="modal-body pt-2">
             <div class="mb-3">
-              <label for="nameReg" class="form-label">Full Name</label>
-              <input id="nameReg" name="full_name" type="text"
-                     class="form-control" required>
+              <label for="first_name" class="form-label text-light">First Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="first_name" name="first_name" value="{{ ms_first_name }}" required>
             </div>
             <div class="mb-3">
-              <label for="emailReg" class="form-label">Email</label>
-              <input id="emailReg" name="email" type="email"
-                     class="form-control" required>
+              <label for="last_name" class="form-label text-light">Last Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="last_name" name="last_name" value="{{ ms_last_name }}" required>
             </div>
             <div class="mb-3">
-              <label for="passwordReg" class="form-label">Password</label>
-              <input id="passwordReg" name="password" type="password"
-                     class="form-control" required>
+              <label for="emailReg" class="form-label text-light">Email <span class="text-danger">*</span></label>
+              <input type="email" class="form-control" id="emailReg" name="email" value="{{ ms_email }}" readonly>
+            </div>
+            <div class="mb-3">
+              <label for="department" class="form-label text-light">Department</label>
+              <input type="text" class="form-control" id="department" name="department">
+            </div>
+            <div class="alert alert-info small">
+              Once you submit your registration, an admin will review and approve your access.
             </div>
           </div>
-          <div class="modal-footer p-2">
-            <button type="submit" class="btn btn-success w-100">
-              Register
+          <div class="modal-footer flex-column border-0">
+            <button type="submit" class="btn btn-primary w-100 register-btn-lg mb-2">
+              Submit Registration
             </button>
           </div>
         </form>
       </div>
     </div>
   </div>
+  {% endif %}
 
-  <script
-    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-..."
-    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

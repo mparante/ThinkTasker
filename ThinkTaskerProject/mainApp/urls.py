@@ -11,4 +11,5 @@ urlpatterns = [
     path("profile/", views.profile, name="profile"),
     path("outlook/", views.outlook_inbox, name="outlook-inbox"),
     path("emails/sync/", views.sync_emails_view, name="sync-emails"),
+    path('update-task-status/', views.update_task_status, name='update-task-status'),
 ]
