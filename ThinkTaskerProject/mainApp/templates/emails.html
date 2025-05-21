@@ -1,10 +1,10 @@
 {% extends "base_generic.html" %}
 {% load static %}
 
-{% block title %}Extracted/Processed Emails{% endblock %}
+{% block title %}Extracted Emails{% endblock %}
 
 {% block content %}
-  <h2 class="mb-4">Extracted/Processed Emails</h2>
+  <h2 class="mb-4">Extracted Emails</h2>
   <form action="{% url 'sync-emails' %}" method="post" style="margin-bottom: 1em;">
     {% csrf_token %}
     <button type="submit" class="btn btn-primary">Sync from Outlook</button>

@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser
 from datetime import datetime
@@ -222,20 +222,6 @@ def fetch_emails(request, top=20):
         return resp.json().get("value", [])
     else:
         return []    
-
-# This function marks an email as read in the user's Outlook inbox after fetch_emails function is called.   
-# def mark_email_as_read(request, message_id):
-#     access_token = _get_graph_token(request)
-#     if not access_token:
-#         return False
-#     headers = {
-#         "Authorization": f"Bearer {access_token}",
-#         "Content-Type": "application/json"
-#     }
-#     url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}"
-#     data = {"isRead": True}
-#     resp = requests.patch(url, headers=headers, json=data)
-#     return resp.status_code == 200
 
 # This function extracts actionable items from the given text.
 # It uses the active patterns from the database to identify words, phrases, or regex patterns that indicate an actionable item.
