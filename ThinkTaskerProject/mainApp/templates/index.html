@@ -16,8 +16,14 @@
         {% if todo_tasks %}
             {% for task in todo_tasks %}
             <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                <h4>{{ task.subject }}</h4>
-                <p class="task-description">{{ task.body_preview }}</p>
+                <h4>
+                  {% if task.email %}
+                    <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
+                  {% else %}
+                    Untitled Email
+                  {% endif %}
+                </h4>
+                <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
                     <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
                 {% endif %}
@@ -46,8 +52,14 @@
         {% if ongoing_tasks %}
             {% for task in ongoing_tasks %}
             <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                <h4>{{ task.subject }}</h4>
-                <p class="task-description">{{ task.body_preview }}</p>
+                <h4>
+                  {% if task.email %}
+                    <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
+                  {% else %}
+                    Untitled Email
+                  {% endif %}
+                </h4>
+                <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
                     <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
                 {% endif %}
@@ -76,8 +88,14 @@
         {% if completed_tasks %}
             {% for task in completed_tasks %}
             <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
-                <h4>{{ task.subject }}</h4>
-                <p class="task-description">{{ task.body_preview }}</p>
+                <h4>
+                  {% if task.email %}
+                    <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
+                  {% else %}
+                    Untitled Email
+                  {% endif %}
+                </h4>
+                <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
                     <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
                 {% endif %}

@@ -62,4 +62,5 @@ class ExtractedTask(models.Model):
 
     # Controls how model object is displayed in the admin interface
     def __str__(self):
-        return f"{self.subject} ({self.status})"
+        email_subject = self.email.subject if self.email else "No Subject"
+        return f"{email_subject} ({self.status})"
