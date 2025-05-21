@@ -5,8 +5,10 @@ from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login
+from django.contrib.auth.decorators import login_required
 from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser
 from datetime import datetime
+
 
 # This is the english language model for spaCy, a natural language processing library.
 # It is used for processing and analyzing text data.
@@ -31,30 +33,7 @@ def get_active_patterns():
 # This function renders the login page.
 # It is called when the user accesses the login URL.
 def login_view(request):
-    return render(request, 'login.html')
-
-# This function handles the login for non-Lenovo users.
-# It checks if the request method is POST and retrieves the email and password from the request.
-# It then authenticates the user using the Django authentication system.
-# If the user is authenticated and approved, it logs the user in and redirects to the dashboard.
-# If the user is not approved, it displays an error message and redirects to the login page.
-def nonlenovo_login(request):
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        password = request.POST.get('password')
-
-        user = authenticate(request, username=email, password=password)
-        if user is not None:
-            if user.is_approved:
-                login(request, user)
-                return redirect('dashboard')
-            else:
-                messages.error(request, "Your account is not yet approved by admin.")
-                return redirect('login')
-        else:
-            messages.error(request, "Invalid credentials.")
-            return redirect('login')
-    return redirect('login')
+    return render(request, "login.html")
 
 # This function handles the registration of new users.
 # It checks if the email is already registered and creates a new user if not.
@@ -62,16 +41,16 @@ def nonlenovo_login(request):
 # The user is marked as active but not approved.
 # After successful registration, a success message is displayed and the user is redirected to the login page.
 def register(request):
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        first_name = request.POST.get('first_name')
-        last_name = request.POST.get('last_name')
-        department = request.POST.get('department')
+    if request.method == "POST":
+        email = request.POST.get("email")
+        first_name = request.POST.get("first_name")
+        last_name = request.POST.get("last_name")
+        department = request.POST.get("department")
         username = email
 
         if ThinkTaskerUser.objects.filter(email=email).exists():
             messages.error(request, "Email already registered.")
-            return redirect('login')
+            return redirect("login")
         
         user = ThinkTaskerUser.objects.create_user(
             username=username,
@@ -85,9 +64,8 @@ def register(request):
         user.save()
 
         messages.success(request, "Registration successful! Await admin approval.")
-        return redirect('login')
-    return redirect('login')
-
+        return redirect("login")
+    return redirect("login")
 
 # This function retrieves the user's profile information from Microsoft Graph API.
 # It uses the access token stored in the session to make a request to the API.
@@ -129,9 +107,6 @@ def graph_login(request):
 # It then uses the access token to fetch the user's profile information from Microsoft Graph API.
 # If the user is found in the database, it logs them in and redirects to the dashboard.
 # If the user is not found, it renders the login page with the user's email and name.
-from django.contrib import messages
-from django.contrib.auth import login
-
 def graph_callback(request):
     if request.GET.get("state") != request.session.get("msal_state"):
         return render(request, "error.html", {"message": "State mismatch."})
@@ -155,7 +130,7 @@ def graph_callback(request):
             user = ThinkTaskerUser.objects.get(email=email)
             if not user.is_approved:
                 messages.error(request, "Your account is not approved by admin yet.")
-                return redirect('login')
+                return redirect("login")
             login(request, user)
             request.session["graph_token"] = result
             return redirect("dashboard")
@@ -195,9 +170,11 @@ def parse_iso_datetime(dt_str):
 # This function renders the main dashboard page.
 # It retrieves the list of tasks and categorizes them into three groups: todo, ongoing, and completed.
 # The tasks are filtered based on their status and passed to the template for rendering.
+@login_required
 def index(request):
     # Query only tasks that came from actionable processed emails
     actionable_tasks = ExtractedTask.objects.filter(
+        user=request.user, 
         email__is_actionable=True
     ).distinct()
 
@@ -207,14 +184,15 @@ def index(request):
     completed_tasks = actionable_tasks.filter(status="Completed")
 
     context = {
-        'todo_tasks': todo_tasks,
-        'ongoing_tasks': ongoing_tasks,
-        'completed_tasks': completed_tasks,
+        "todo_tasks": todo_tasks,
+        "ongoing_tasks": ongoing_tasks,
+        "completed_tasks": completed_tasks,
     }
-    return render(request, 'index.html', context)
+    return render(request, "index.html", context)
 
+@login_required
 def outlook_inbox(request):
-    processed_emails = ProcessedEmail.objects.all().order_by('-processed_at')
+    processed_emails = ProcessedEmail.objects.filter(user=request.user).order_by("-processed_at")
     return render(request, "emails.html", {"processed_emails": processed_emails})
 
 # This function returns a list of the user's most recent UNREAD Outlook messages as dicts.
@@ -268,18 +246,19 @@ def extract_actionable_items(text):
     patterns = ActionablePattern.objects.filter(is_active=True)
     found_patterns = []
     for pattern in patterns:
-        if pattern.pattern_type == 'word':
+        if pattern.pattern_type == "word":
             # word boundary, case insensitive
-            if re.search(rf'\b{re.escape(pattern.pattern)}\b', text, re.IGNORECASE):
+            if re.search(rf"\b{re.escape(pattern.pattern)}\b", text, re.IGNORECASE):
                 found_patterns.append(pattern)
-        elif pattern.pattern_type == 'phrase':
+        elif pattern.pattern_type == "phrase":
             if pattern.pattern.lower() in text.lower():
                 found_patterns.append(pattern)
-        elif pattern.pattern_type == 'regex':
+        elif pattern.pattern_type == "regex":
             if re.search(pattern.pattern, text, re.IGNORECASE):
                 found_patterns.append(pattern)
     return found_patterns
 
+@login_required
 def sync_emails_view(request):
     access_token = _get_graph_token(request)
     if access_token:
@@ -289,7 +268,8 @@ def sync_emails_view(request):
             preview = m.get("bodyPreview", "")
             message_id = m["id"]
             web_link = m.get("webLink")
-            if ProcessedEmail.objects.filter(message_id=message_id).exists():
+            
+            if ProcessedEmail.objects.filter(message_id=message_id, user=request.user).exists():
                 continue
 
             # Extract actionable items
@@ -299,6 +279,7 @@ def sync_emails_view(request):
 
             # Save the ProcessedEmail
             pe = ProcessedEmail.objects.create(
+                user=request.user,
                 message_id=message_id,
                 subject=subject,
                 body_preview=preview,
@@ -311,13 +292,15 @@ def sync_emails_view(request):
                 priority = next((p.priority for p in actionable_patterns if p.priority), "")
                 # Create one task per actionable email (or per pattern if you want!)
                 ExtractedTask.objects.create(
+                    user=request.user,
                     email=pe,
                     task_description=f"{subject} - {preview}",
                     actionable_patterns=actionable_list,
                     priority=priority,
                     status="Open",
                 )
-    messages.success(request, "Synced latest emails from Outlook.")
+
+    # messages.success(request, "Synced latest emails from Outlook.")
     return redirect("outlook-inbox")
 
 # This function updates the status of a task based on the provided task ID and new status.
@@ -329,12 +312,13 @@ def sync_emails_view(request):
 # If the request method is not POST, it returns a JSON response indicating an invalid request.
 # The function returns a JSON response indicating success or failure.
 @csrf_exempt
+@login_required
 def update_task_status(request):
     if request.method == "POST":
         task_id = request.POST.get("task_id")
         new_status = request.POST.get("new_status")
         try:
-            task = ExtractedTask.objects.get(id=task_id)
+            task = ExtractedTask.objects.get(id=task_id, user=request.user)
             task.status = new_status
             task.save()
             return JsonResponse({"success": True})

@@ -66,6 +66,7 @@ class ProcessedEmail(models.Model):
 # The created_at field is used to store the timestamp of when the task was created.
 # The model is used to manage tasks and their associated emails in the database.
 class ExtractedTask(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="tasks")
     email = models.ForeignKey(ProcessedEmail, on_delete=models.CASCADE, related_name='tasks')
     task_description = models.TextField()
     actionable_patterns = models.JSONField(default=list, blank=True)
@@ -73,8 +74,7 @@ class ExtractedTask(models.Model):
     deadline = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, default="Open")
     created_at = models.DateTimeField(auto_now_add=True)
-
-    # Controls how model object is displayed in the admin interface
+    
     def __str__(self):
         email_subject = self.email.subject if self.email else "No Subject"
         return f"{email_subject} ({self.status})"
