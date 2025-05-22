@@ -320,14 +320,14 @@ def update_task_status(request):
 
 @login_required
 def task_list(request):
-    query = request.GET.get('q', '')
+    query = request.GET.get("q", "")
     tasks = ExtractedTask.objects.filter(user=request.user)
     if query:
         tasks = tasks.filter(
             Q(subject__icontains=query) |
             Q(task_description__icontains=query)
         )
-    tasks = tasks.order_by('-created_at')
+    tasks = tasks.order_by("-created_at")
     return render(request, "task_list.html", {"tasks": tasks, "query": query})
 
 @login_required
@@ -362,3 +362,11 @@ def delete_task(request, task_id):
     task = ExtractedTask.objects.get(id=task_id, user=request.user)
     task.delete()
     return redirect("task_list")
+
+@login_required
+def settings_view(request):
+    return render(request, "settings.html")
+
+@login_required
+def help_docs(request):
+    return render(request, "help_docs.html")

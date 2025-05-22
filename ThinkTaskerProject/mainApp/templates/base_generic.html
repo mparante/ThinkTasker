@@ -12,18 +12,27 @@
 <body>
     <header class="app-header">
         <div class="d-flex align-items-center">
-            <a href="/" class="text-decoration-none text-dark fw-semibold fs-4">ThinkTasker</a>
+            <a href="#" class="text-decoration-none text-dark fw-semibold fs-4">ThinkTasker</a>
         </div>
-        <!-- <div class="dropdown text-end"> -->
-            <!-- <a href="#" class="dropdown-toggle" data-bs-toggle="dropdown"> -->
-                <a>{% if given_name %}Hi, {{ given_name }}!{% else %}Hi, User!{% endif %}</a>
-            <!-- </a> -->
-            <!-- <ul class="dropdown-menu dropdown-menu-end text-small">
-                <li><a class="dropdown-item" href="#">Sign out</a></li>
-            </ul> -->
-        <!-- </div> -->
+        <div class="dropdown text-end">
+            <a href="#" class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <span>{% if given_name %}Hi, {{ given_name }}!{% else %}Hi, User!{% endif %}</span>
+            </a>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
+                <li><a class="dropdown-item" href="{% url 'settings' %}">Settings</a></li>
+                <li><a class="dropdown-item" href="{% url 'help_docs' %}">Help & Docs</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="dropdown-item w-100 text-start"><strong>Sign out</strong>
+                        </button>
+                    </form>
+                </li>
+            </ul>
+        </div>
     </header>
-    
     <div class="app-sidebar">
         <ul class="nav nav-pills flex-column mb-auto">
         <li class="nav-item">
@@ -44,12 +53,12 @@
             From Outlook
             </a>
         </li>
-        <li class="nav-item">
+        <!-- <li class="nav-item">
             <a href="#"
             class="nav-link {% if request.resolver_match.url_name == 'calendar' %}active{% endif %}">
             Calendar
             </a>
-        </li>
+        </li> -->
         <!-- <li class="nav-item">
             <a href="#"
             class="nav-link {% if request.resolver_match.url_name == 'priority-view' %}active{% endif %}">
@@ -62,20 +71,17 @@
             Settings
             </a>
         </li> -->
-        </ul>
-        
-        <hr>
-        
+        <!-- <hr>        
         <div class="dropdown"> 
-            <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"> 
-            <img src="{% static 'img/avatar.png' %}" alt="" width="32" height="32" class="rounded-circle me-2">Account</a> 
+            <a class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">Account </a> 
             <ul class="dropdown-menu dropdown-menu-dark text-small shadow"> 
                 <li><a class="dropdown-item" href="#">Settings</a></li> 
                 <li><a class="dropdown-item" href="#">Help & Docs</a></li> 
                 <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
                 <li><hr class="dropdown-divider"></li> 
                 <li><a class="dropdown-item" href="#">Sign out</a></li> </ul> 
-        </div> 
+        </div>  -->
+        </ul>
     </div>
     
     <div class="app-content">
