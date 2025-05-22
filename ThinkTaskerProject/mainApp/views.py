@@ -1,14 +1,18 @@
 import msal, uuid, requests, spacy, re
-from django.shortcuts import render, redirect
+
+from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser
-from datetime import datetime
+from django.views.decorators.http import require_POST
+from django.db.models import Q
 
+from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser
+from .forms import ExtractedTaskForm
+from datetime import datetime
 
 # This is the english language model for spaCy, a natural language processing library.
 # It is used for processing and analyzing text data.
@@ -174,8 +178,9 @@ def parse_iso_datetime(dt_str):
 def index(request):
     # Query only tasks that came from actionable processed emails
     actionable_tasks = ExtractedTask.objects.filter(
-        user=request.user, 
-        email__is_actionable=True
+        user=request.user
+    ).filter(
+        Q(email__is_actionable=True) | Q(email__isnull=True)
     ).distinct()
 
     # Categorize tasks based on status (adjust as needed)
@@ -280,6 +285,7 @@ def sync_emails_view(request):
                 ExtractedTask.objects.create(
                     user=request.user,
                     email=pe,
+                    subject=subject,
                     task_description=f"{subject} - {preview}",
                     actionable_patterns=actionable_list,
                     priority=priority,
@@ -311,3 +317,41 @@ def update_task_status(request):
         except ExtractedTask.DoesNotExist:
             return JsonResponse({"success": False, "error": "Task not found"})
     return JsonResponse({"success": False, "error": "Invalid request"})
+
+@login_required
+def task_list(request):
+    tasks = ExtractedTask.objects.filter(user=request.user).order_by('-created_at')
+    return render(request, "task_list.html", {"tasks": tasks})
+
+@login_required
+def create_task(request):
+    if request.method == "POST":
+        form = ExtractedTaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.user = request.user
+            task.is_actionable = True
+            task.save()
+            return redirect("task_list")
+    else:
+        form = ExtractedTaskForm()
+    return render(request, "task_form.html", {"form": form})
+
+@login_required
+def edit_task(request, pk):
+    task = get_object_or_404(ExtractedTask, pk=pk, user=request.user)
+    if request.method == "POST":
+        form = ExtractedTaskForm(request.POST, instance=task)
+        if form.is_valid():
+            form.save()
+            return redirect("task_list")
+    else:
+        form = ExtractedTaskForm(instance=task)
+    return render(request, "task_form.html", {"form": form, "task": task})
+
+@login_required
+@require_POST
+def delete_task(request, task_id):
+    task = ExtractedTask.objects.get(id=task_id, user=request.user)
+    task.delete()
+    return redirect("task_list")

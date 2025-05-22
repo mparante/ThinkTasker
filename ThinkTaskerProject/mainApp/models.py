@@ -67,14 +67,15 @@ class ProcessedEmail(models.Model):
 # The model is used to manage tasks and their associated emails in the database.
 class ExtractedTask(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="tasks")
-    email = models.ForeignKey(ProcessedEmail, on_delete=models.CASCADE, related_name='tasks')
+    email = models.ForeignKey(ProcessedEmail, on_delete=models.CASCADE, related_name='tasks', null=True, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
     task_description = models.TextField()
     actionable_patterns = models.JSONField(default=list, blank=True)
     priority = models.CharField(max_length=16, blank=True)
     deadline = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=32, default="Open")
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         email_subject = self.email.subject if self.email else "No Subject"
         return f"{email_subject} ({self.status})"

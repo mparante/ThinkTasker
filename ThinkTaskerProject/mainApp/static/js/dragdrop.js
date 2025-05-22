@@ -85,16 +85,21 @@ window.drop = function (event, columnId) {
     }
 };
 
-document.addEventListener("DOMContentLoaded", function () {
-    const columns = document.querySelectorAll(".column");
+function columnHasTasks(column) {
+    return column.querySelectorAll(".task-card").length > 0;
+}
 
-    columns.forEach(column => {
-        column.addEventListener("dragover", allowDrop);
-        column.addEventListener("drop", function (event) {
-            drop(event, this.id);
-        });
-    });
-});
+function ensureNoTasksMessage(column) {
+    if (!columnHasTasks(column)) {
+        // Only add if not present
+        if (!column.querySelector('.no-tasks-message')) {
+            const msg = document.createElement('p');
+            msg.className = 'no-tasks-message';
+            msg.textContent = 'No tasks';
+            column.appendChild(msg);
+        }
+    }
+}
 
 document.addEventListener("DOMContentLoaded", function () {
     const columns = document.querySelectorAll(".column");
@@ -115,19 +120,3 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
-
-function columnHasTasks(column) {
-    return column.querySelectorAll(".task-card").length > 0;
-}
-
-function ensureNoTasksMessage(column) {
-    if (!columnHasTasks(column)) {
-        // Only add if not present
-        if (!column.querySelector('.no-tasks-message')) {
-            const msg = document.createElement('p');
-            msg.className = 'no-tasks-message';
-            msg.textContent = 'No tasks';
-            column.appendChild(msg);
-        }
-    }
-}

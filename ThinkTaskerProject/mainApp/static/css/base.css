@@ -83,3 +83,95 @@ html, body {
     margin: 0;
     padding: 0;
 }
+
+/* For task delete button */
+.btn-outline-danger {
+    color: #e2231a;
+    border-color: #e2231a;
+}
+.btn-outline-danger:hover, .btn-outline-danger:focus {
+    background: #e2231a;
+    color: #fff;
+    border-color: #e2231a;
+}
+
+.table-tasks {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 3px 16px rgba(40,40,40,0.07);
+    overflow: hidden;
+    margin-top: 1.5em;
+}
+
+.table-tasks th, .table-tasks td {
+    padding: 12px 18px !important;
+    vertical-align: middle;
+}
+
+.table-tasks tbody tr:hover {
+    background: #f6f9fa;
+    transition: background 0.13s;
+}
+
+.badge-priority {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.95em;
+    font-weight: 600;
+}
+.badge-urgent {
+    background: #e2231a;
+    color: #fff;
+}
+.badge-important {
+    background: #ffa726;
+    color: #23272f;
+}
+.badge-medium {
+    background: #ffeb3b;
+    color: #23272f;
+}
+.badge-low {
+    background: #43a047;
+    color: #fff;
+}
+.btn-edit {
+    border: 1px solid #1976d2;
+    color: #1976d2;
+    background: #fff;
+    border-radius: 5px;
+    padding: 2px 13px;
+    margin-right: 5px;
+    transition: background .15s;
+}
+.btn-edit:hover {
+    background: #e3f0ff;
+}
+
+.empty-table-message {
+    text-align: center;
+    color: #888;
+    padding: 50px 0;
+    font-size: 1.14em;
+}
+.empty-table-message .empty-icon {
+    font-size: 2.2em;
+    display: block;
+    margin-bottom: 12px;
+    opacity: 0.42;
+}
+.add-task-btn {
+    background: #e2231a;
+    color: #fff;
+    font-weight: 500;
+    padding: 8px 22px;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+    margin-top: 16px;
+    cursor: pointer;
+    transition: background 0.18s;
+}
+.add-task-btn:hover {
+    background: #b71c12;
+}
