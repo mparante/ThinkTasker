@@ -24,7 +24,8 @@
             <td>{{ task.task_description }}</td>
             <td>{{ task.priority }}</td>
             <td>{{ task.status }}</td>
-            <td>{% if task.deadline %}{{ task.deadline|date:"M d, Y H:i" }}{% endif %}</td>
+            <!-- <td>{% if task.deadline %}{{ task.deadline|date:"M d, Y H:i" }}{% endif %}</td> -->
+            <td>{% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}</td>
             <td>
                 <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
                         data-bs-target="#taskModal"

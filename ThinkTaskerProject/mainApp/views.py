@@ -338,8 +338,8 @@ def create_task(request):
     return render(request, "task_form.html", {"form": form})
 
 @login_required
-def edit_task(request, pk):
-    task = get_object_or_404(ExtractedTask, pk=pk, user=request.user)
+def edit_task(request, task_id):
+    task = get_object_or_404(ExtractedTask, pk=task_id, user=request.user)
     if request.method == "POST":
         form = ExtractedTaskForm(request.POST, instance=task)
         if form.is_valid():
