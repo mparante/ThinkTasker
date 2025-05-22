@@ -286,7 +286,7 @@ def sync_emails_view(request):
                     user=request.user,
                     email=pe,
                     subject=subject,
-                    task_description=f"{subject} - {preview}",
+                    task_description=preview,
                     actionable_patterns=actionable_list,
                     priority=priority,
                     status="Open",
@@ -320,8 +320,15 @@ def update_task_status(request):
 
 @login_required
 def task_list(request):
-    tasks = ExtractedTask.objects.filter(user=request.user).order_by('-created_at')
-    return render(request, "task_list.html", {"tasks": tasks})
+    query = request.GET.get('q', '')
+    tasks = ExtractedTask.objects.filter(user=request.user)
+    if query:
+        tasks = tasks.filter(
+            Q(subject__icontains=query) |
+            Q(task_description__icontains=query)
+        )
+    tasks = tasks.order_by('-created_at')
+    return render(request, "task_list.html", {"tasks": tasks, "query": query})
 
 @login_required
 def create_task(request):

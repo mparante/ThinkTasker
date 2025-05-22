@@ -9,6 +9,10 @@
 <h2 class="mb-3">My Tasks</h2>
 <button class="btn btn-lenovo mb-3" data-bs-toggle="modal" data-bs-target="#taskModal" onclick="openTaskModal()">+ Add Task</button>
 <div class="table-responsive">
+    <form method="get" class="mb-3 d-flex" style="max-width: 100%;">
+        <input type="text" class="form-control me-2" name="q" placeholder="Search tasks..." value="{{ query }}">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </form>
     <table class="table align-middle">
         <colgroup>
             <col style="width: 15%;">
