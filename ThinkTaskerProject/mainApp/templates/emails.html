@@ -20,16 +20,6 @@
             </div>
             <div class="email-preview mb-2" style="color: #555;">
               {{ email.body_preview|truncatechars:120|default_if_none:"" }}
-              <!-- {% if email.tasks.all %}
-                <div style="margin-top: 5px; color: #357;">
-                  <b>Actionable Task(s):</b>
-                  <ul style="margin:0 0 0 15px; padding:0;">
-                    {% for task in email.tasks.all %}
-                      <li>{{ task.task_description|truncatechars:120|default_if_none:"" }}</li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %} -->
             </div>
           </div>
         </a>
