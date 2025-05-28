@@ -55,6 +55,7 @@ class ProcessedEmail(models.Model):
     is_actionable = models.BooleanField(default=False)
     is_new = models.BooleanField(default=True)
     web_link = models.URLField(max_length=1024, blank=True, null=True)
+    is_reference = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.subject} - Actionable: {self.is_actionable}"
@@ -80,3 +81,18 @@ class ExtractedTask(models.Model):
     def __str__(self):
         email_subject = self.email.subject if self.email else "No Subject"
         return f"{email_subject} ({self.status})"
+    
+class ReferenceDocument(models.Model):
+    subject = models.CharField(max_length=255, blank=True)
+    body = models.TextField()
+    tokens = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.subject or f"Reference #{self.pk}"
+
+    def save(self, *args, **kwargs):
+        if not self.tokens and self.body:
+            from nltk.tokenize import word_tokenize
+            self.tokens = word_tokenize(self.body.lower())
+        super().save(*args, **kwargs)

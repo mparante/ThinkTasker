@@ -1,4 +1,5 @@
 {% extends "base_generic.html" %}
+{% load tz %}
 
 {% block title %}Extracted Emails{% endblock %}
 
@@ -8,6 +9,15 @@
     {% csrf_token %}
     <button type="submit" class="btn btn-primary">Sync from Outlook</button>
   </form>
+  {% if last_synced %}
+    <div class="alert alert-warning mb-3" style="font-size:0.8em;">
+      <b>Last Synced:</b> {{ last_synced|timezone:"Asia/Tokyo"|date:"Y-m-d H:i:s" }}
+    </div>
+  {% else %}
+    <div class="alert alert-warning mb-3" style="font-size:0.8em;">
+      <b>No sync has been performed yet.</b>
+    </div>
+  {% endif %}
   <div class="board">
     {% if processed_emails %}
       {% for email in processed_emails %}
