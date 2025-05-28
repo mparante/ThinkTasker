@@ -100,8 +100,12 @@
     color: #ffc107;
 }
 
-.priority-high {
-    color: #dc3545;
+.priority-important {
+    color: #d74009;
+}
+
+.priority-urgent {
+    color: #f70921;
 }
 
 .no-tasks-message {

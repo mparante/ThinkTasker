@@ -11,7 +11,7 @@
   </form>
   {% if last_synced %}
     <div class="alert alert-warning mb-3" style="font-size:0.8em;">
-      <b>Last Synced:</b> {{ last_synced|timezone:"Asia/Tokyo"|date:"Y-m-d H:i:s" }}
+      <b>Last Sync Attempt:</b> {{ last_synced|timezone:"Asia/Tokyo"|date:"Y-m-d H:i:s" }}
     </div>
   {% else %}
     <div class="alert alert-warning mb-3" style="font-size:0.8em;">

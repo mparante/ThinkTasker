@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
-from django.db.models import Q
+from django.db.models import Q, Case, When, Value, IntegerField
 
 from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser, ReferenceDocument
 from .forms import ExtractedTaskForm
@@ -21,6 +21,9 @@ from nltk.tokenize import word_tokenize
 from django.utils import timezone
 
 from langdetect import detect, LangDetectException
+
+TFIDF_MAX = 20.0
+CF_MAX = 2.0
 
 logger = logging.getLogger(__name__)
 #nltk.download('punkt')
@@ -239,6 +242,8 @@ def sync_emails_view(request):
         preview = m.get("bodyPreview", "")
         full_body = fetch_full_email_body(message_id, access_token)
         text_for_extraction = subject + " " + full_body
+        is_flagged = m.get("flag", {}).get("flagStatus", "") == "flagged"
+        is_important = m.get("importance", "") == "high"
 
         if not is_english(text_for_extraction):
             continue
@@ -269,7 +274,6 @@ def sync_emails_view(request):
             f"WebLink='{web_link}', IsReference={pe.is_reference}"
         )
         
-
         if is_actionable:
             cleaned_tokens = clean_email_text(text_for_extraction)
             terms = set(cleaned_tokens)
@@ -288,9 +292,11 @@ def sync_emails_view(request):
                 cf_sum += cf
                 tfidf_details[term] = {'tf': tf, 'idf': idf, 'ct': ct, 'tfidf': tfidf}
                 cf_details[term] = cf
-
-            tfidf_norm = tfidf_sum / (tfidf_sum or 1)
-            cf_norm = cf_sum / (cf_sum or 1)
+            
+            if is_flagged or is_important:
+                ct += 1.0
+            tfidf_norm = min(tfidf_sum / TFIDF_MAX, 1)
+            cf_norm = min(cf_sum / CF_MAX, 1)
             alpha, beta = 0.7, 0.3
             score = alpha * tfidf_norm + beta * cf_norm
 
@@ -350,7 +356,15 @@ def task_list(request):
             Q(subject__icontains=query) |
             Q(task_description__icontains=query)
         )
-    tasks = tasks.order_by("-created_at")
+    priority_order = Case(
+        When(priority='Urgent', then=Value(1)),
+        When(priority='Important', then=Value(2)),
+        When(priority='Medium', then=Value(3)),
+        When(priority='Low', then=Value(4)),
+        default=Value(5),
+        output_field=IntegerField()
+    )
+    tasks = tasks.annotate(priority_rank=priority_order).order_by('priority_rank', 'deadline', '-created_at')
     return render(request, "task_list.html", {"tasks": tasks, "query": query})
 
 @login_required
@@ -418,53 +432,26 @@ def compute_cf(term, all_docs_tokens):
     count = sum(tokens.count(term) for tokens in all_docs_tokens)
     return count / N if N > 0 else 0
 
-def get_contextual_weight(term, is_important=False, from_manager=False):
-    high_priority_terms = {'report', 'meeting', 'deadline', 'submit', 'approve'}
-    if is_important or term in high_priority_terms:
-        return 2.0
-    if from_manager:
-        return 1.5
-    return 1.0
+def get_contextual_weight(term):
+    high_priority_terms = {'urgent', 'ASAP', 'emergency', 'field issue', 'escalate', 'critical', 'immediate attention'}
+    return 2.0 if term in high_priority_terms else 1.0
 
-def prioritize_tasks(emails, important_senders=None):
-    all_docs_tokens = [clean_email_text(email['body']) for email in emails]
-    scores = []
-    tfidf_values = []
-    cf_values = []
+def add_weekdays(start, days):
+    current = start
+    added = 0
+    while added < days:
+        current += timedelta(days=1)
+        if current.weekday() < 5:
+            added += 1
+    return current
 
-    for idx, email in enumerate(emails):
-        tokens = all_docs_tokens[idx]
-        terms = set(tokens)
-        tfidf_sum = 0
-        cf_sum = 0
-        for term in terms:
-            tf = compute_tf(term, tokens)
-            idf = compute_idf(term, all_docs_tokens)
-            cf = compute_cf(term, all_docs_tokens)
-            ct = get_contextual_weight(term, is_important=email.get('is_important', False), from_manager=email.get('from_manager', False))
-            tfidf = tf * idf * ct
-            tfidf_sum += tfidf
-            cf_sum += cf
-        tfidf_values.append(tfidf_sum)
-        cf_values.append(cf_sum)
+def first_of_next_month(dt):
+    if dt.month == 12:
+        return dt.replace(year=dt.year+1, month=1, day=1)
+    else:
+        return dt.replace(month=dt.month+1, day=1)
 
-    max_tfidf = max(tfidf_values) if tfidf_values else 1
-    max_cf = max(cf_values) if cf_values else 1
-
-    alpha = 0.7
-    beta = 0.3
-
-    for i, email in enumerate(emails):
-        tfidf_norm = tfidf_values[i] / max_tfidf if max_tfidf else 0
-        cf_norm = cf_values[i] / max_cf if max_cf else 0
-        S = alpha * tfidf_norm + beta * cf_norm
-        scores.append({
-            "email": email,
-            "priority_score": S
-        })
-    return scores
-
-def extract_deadline(text):
+def extract_deadline(text, sent_date=None):
     patterns = [
         r'by ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
         r'on ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
@@ -476,59 +463,71 @@ def extract_deadline(text):
         r'next month',
         r'next ([A-Za-z]+)',
     ]
-    now = timezone.now()
+    now = sent_date if sent_date is not None else timezone.now()
+
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            date_str = match.group(1) if match.groups() else match.group(0)
-            try:
-                if 'today' in date_str.lower():
-                    return now
-                elif 'tomorrow' in date_str.lower():
-                    return now + timedelta(days=1)
-                elif 'days' in date_str.lower():
-                    days = int(re.findall(r'\d+', date_str)[0])
-                    return now + timedelta(days=days)
-                elif 'next week' in date_str.lower():
-                    return now + timedelta(weeks=1)
-                elif 'next month' in date_str.lower():
-                    year = now.year + (1 if now.month == 12 else 0)
-                    month = 1 if now.month == 12 else now.month + 1
-                    return now.replace(year=year, month=month, day=1)
-                elif pattern.startswith('next ([A-Za-z]+)'):
-                    weekday_str = match.group(1)
-                    weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
-                    if weekday_str.lower() in weekdays:
-                        days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
-                        if days_ahead == 0:
-                            days_ahead = 7
-                        return now + timedelta(days=days_ahead)
-                else:
-                    deadline = dateutil.parser.parse(date_str, fuzzy=True, default=now)
-                    if deadline < now:
-                        try:
-                            deadline = deadline.replace(year=now.year + 1)
-                        except Exception:
-                            pass
-                    return deadline
-            except Exception:
-                continue
+        if not match:
+            continue
+
+        date_str = match.group(1) if match.groups() else match.group(0)
+        try:
+            date_str_lc = date_str.lower()
+            if 'today' in date_str_lc or 'now' in date_str_lc:
+                return now
+            elif 'tomorrow' in date_str_lc:
+                return add_weekdays(now, 1)
+            elif 'days' in date_str_lc:
+                days = int(re.findall(r'\d+', date_str)[0])
+                return add_weekdays(now, days)
+            elif 'next week' in date_str_lc:
+                days_ahead = (0 - now.weekday() + 7) % 7 or 7
+                return now + timedelta(days=days_ahead)
+            elif 'next month' in date_str_lc:
+                return first_of_next_month(now)
+            elif pattern.startswith('next ([A-Za-z]+)'):
+                weekday_str = match.group(1)
+                weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
+                if weekday_str.lower() in weekdays:
+                    days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
+                    if days_ahead == 0:
+                        days_ahead = 7
+                    return now + timedelta(days=days_ahead)
+            else:
+                deadline = dateutil.parser.parse(date_str, fuzzy=True, default=now)
+                if deadline < now:
+                    try:
+                        deadline = deadline.replace(year=now.year + 1)
+                    except Exception:
+                        pass
+                return deadline
+        except Exception:
+            continue
+
     return None
 
-def assign_priority(score, deadline):
-    now = timezone.now()
-    if deadline:
-        days_left = (deadline - now).days
+def assign_priority(score, extracted_deadline):
+    if score >= 0.7:
+        base_priority = 'Important'
+    elif score >= 0.4:
+        base_priority = 'Medium'
     else:
-        days_left = None
-    if score >= 0.75 and days_left is not None and days_left <= 3:
-        return "Urgent"
-    elif 0.5 <= score < 0.75 and days_left is not None and 4 <= days_left <= 5:
-        return "Important"
-    elif 0.25 <= score < 0.5 and (days_left is None or days_left > 5):
-        return "Medium"
+        base_priority = 'Low'
+
+    if extracted_deadline:
+        now = timezone.now()
+        delta = (extracted_deadline - now).days
+        
+        if delta <= 3:
+            return 'Urgent'
+        elif 4 <= delta <= 5:
+            return 'Important'
+        elif delta > 30:
+            return 'Low'
+        else:
+            return base_priority
     else:
-        return "Low"
+        return base_priority
 
 def fetch_all_emails(access_token, folder="Inbox"):
     headers = {
