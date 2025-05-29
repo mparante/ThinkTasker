@@ -19,8 +19,8 @@ from datetime import datetime, timedelta
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from django.utils import timezone
-
 from langdetect import detect, LangDetectException
+from . import todo
 
 TFIDF_MAX = 20.0
 CF_MAX = 2.0
@@ -295,7 +295,7 @@ def sync_emails_view(request):
             
             if is_flagged or is_important:
                 ct += 1.0
-            tfidf_norm = min(tfidf_sum / TFIDF_MAX, 1)
+            tfidf_norm = min((tfidf_sum * ct) / TFIDF_MAX, 1)
             cf_norm = min(cf_sum / CF_MAX, 1)
             alpha, beta = 0.7, 0.3
             score = alpha * tfidf_norm + beta * cf_norm
@@ -313,6 +313,9 @@ def sync_emails_view(request):
             logger.info(f"  Extracted Deadline: {deadline}")
             logger.info(f"  Assigned Priority: {priority_label}")
 
+            # Create To Do task
+            todo_task_id = todo.create_todo_task(access_token, subject, preview[:500], deadline)
+
             ExtractedTask.objects.create(
                 user=user,
                 email=pe,
@@ -322,6 +325,7 @@ def sync_emails_view(request):
                 priority=priority_label,
                 deadline=deadline,
                 status="Open",
+                todo_task_id=todo_task_id,
             )
 
         mark_email_as_read(message_id, access_token)
@@ -342,6 +346,25 @@ def update_task_status(request):
             task = ExtractedTask.objects.get(id=task_id, user=request.user)
             task.status = new_status
             task.save()
+            todo_status_map = {
+                "open": "notStarted",
+                "ongoing": "inProgress",
+                "completed": "completed"
+            }
+            todo_status = todo_status_map.get(new_status.lower(), "notStarted")
+            access_token = _get_graph_token(request)
+            if task.todo_task_id:
+                if todo_status == "completed":
+                    todo.mark_todo_task_completed(access_token, task.todo_task_id)
+                else:
+                    todo.update_todo_task(
+                        access_token,
+                        task.todo_task_id,
+                        title=task.subject,
+                        description=task.task_description,
+                        due_date=task.deadline,
+                        status=todo_status
+                    )
             return JsonResponse({"success": True})
         except ExtractedTask.DoesNotExist:
             return JsonResponse({"success": False, "error": "Task not found"})
@@ -375,6 +398,15 @@ def create_task(request):
             task = form.save(commit=False)
             task.user = request.user
             task.is_actionable = True
+            # To Do task creation
+            access_token = _get_graph_token(request)
+            todo_task_id = todo.create_todo_task(
+                access_token,
+                task.subject,
+                task.task_description,
+                task.deadline
+            )
+            task.todo_task_id = todo_task_id
             task.save()
             return redirect("task_list")
     else:
@@ -387,7 +419,26 @@ def edit_task(request, task_id):
     if request.method == "POST":
         form = ExtractedTaskForm(request.POST, instance=task)
         if form.is_valid():
-            form.save()
+            updated_task = form.save(commit=False)
+            access_token = _get_graph_token(request)
+            todo_status_map = {
+                "open": "notStarted",
+                "ongoing": "inProgress",
+                "completed": "completed"
+            }
+            todo_status = todo_status_map.get(updated_task.status.lower(), "notStarted")
+            try:
+                todo.update_todo_task(
+                    access_token,
+                    updated_task.todo_task_id,
+                    title=updated_task.subject,
+                    description=updated_task.task_description,
+                    due_date=updated_task.deadline,
+                    status=todo_status
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync To Do update for task {updated_task.todo_task_id}: {e}")
+            updated_task.save()
             return redirect("task_list")
     else:
         form = ExtractedTaskForm(instance=task)
@@ -397,6 +448,10 @@ def edit_task(request, task_id):
 @require_POST
 def delete_task(request, task_id):
     task = ExtractedTask.objects.get(id=task_id, user=request.user)
+    # To Do task deletion
+    access_token = _get_graph_token(request)
+    if task.todo_task_id:
+        todo.delete_todo_task(access_token, task.todo_task_id)
     task.delete()
     return redirect("task_list")
 

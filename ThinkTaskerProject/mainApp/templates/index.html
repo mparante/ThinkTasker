@@ -18,11 +18,11 @@
             <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
                 <h4>
                     {% if task.email %}
-                        <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
-                    {% elif task.subject %}
-                        {{ task.subject }}
+                        <a href="{{ task.email.web_link }}" target="_blank">
+                            {{ task.subject|default:task.email.subject }}
+                        </a>
                     {% else %}
-                        Untitled Task
+                        {{ task.subject|default:"Untitled Task" }}
                     {% endif %}
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
@@ -56,11 +56,11 @@
             <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
                 <h4>
                     {% if task.email %}
-                        <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
-                    {% elif task.subject %}
-                        {{ task.subject }}
+                        <a href="{{ task.email.web_link }}" target="_blank">
+                            {{ task.subject|default:task.email.subject }}
+                        </a>
                     {% else %}
-                        Untitled Task
+                        {{ task.subject|default:"Untitled Task" }}
                     {% endif %}
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
@@ -94,11 +94,11 @@
             <div class="task-card completed" id="task-{{ task.id }}" draggable="false">
                 <h4>
                     {% if task.email %}
-                        <a href="{{ task.email.web_link }}" target="_blank">{{ task.email.subject }}</a>
-                    {% elif task.subject %}
-                        {{ task.subject }}
+                        <a href="{{ task.email.web_link }}" target="_blank">
+                            {{ task.subject|default:task.email.subject }}
+                        </a>
                     {% else %}
-                        Untitled Task
+                        {{ task.subject|default:"Untitled Task" }}
                     {% endif %}
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
