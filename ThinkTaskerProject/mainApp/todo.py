@@ -21,7 +21,7 @@ def create_todo_task(access_token, title, description, due_date):
     list_id = get_todo_list_id(access_token)
     if not list_id:
         print("No default To Do list found.")
-        return None
+        return None, None
     url = f"https://graph.microsoft.com/v1.0/me/todo/lists/{list_id}/tasks"
     data = {"title": title}
     if description:
@@ -36,14 +36,15 @@ def create_todo_task(access_token, title, description, due_date):
         "Content-Type": "application/json"
     }
     resp = requests.post(url, json=data, headers=headers)
+    print("POST Response:", resp)
     if resp.status_code == 201:
-        return resp.json().get("id")
+        return resp.json().get("id"), list_id   # Return both!
     else:
         print("To Do task creation failed:", resp.text)
-        return None
+        return None, None
 
-def update_todo_task(access_token, todo_task_id, title=None, description=None, due_date=None, status=None):
-    url = f"https://graph.microsoft.com/v1.0/me/todo/tasks/{todo_task_id}"
+def update_todo_task(access_token, list_id, todo_task_id, title=None, description=None, due_date=None, status=None):
+    url = f"https://graph.microsoft.com/v1.0/me/todo/lists/{list_id}/tasks/{todo_task_id}"
     data = {}
     if title is not None:
         data["title"] = title
@@ -55,7 +56,6 @@ def update_todo_task(access_token, todo_task_id, title=None, description=None, d
             "timeZone": "UTC"
         }
     if status:
-        # Values: notStarted, inProgress, completed, waitingOnOthers, deferred
         data["status"] = status
     if not data:
         return True
@@ -64,13 +64,15 @@ def update_todo_task(access_token, todo_task_id, title=None, description=None, d
         "Content-Type": "application/json"
     }
     resp = requests.patch(url, json=data, headers=headers)
+    print("PATCH Response code:", resp.status_code)
+    print("PATCH Response text:", resp.text)
     return resp.status_code in (200, 204)
 
-def mark_todo_task_completed(access_token, todo_task_id):
-    return update_todo_task(access_token, todo_task_id, status="completed")
+def mark_todo_task_completed(access_token, list_id, todo_task_id):
+    return update_todo_task(access_token, list_id, todo_task_id, status="completed")
 
-def delete_todo_task(access_token, todo_task_id):
-    url = f"https://graph.microsoft.com/v1.0/me/todo/tasks/{todo_task_id}"
+def delete_todo_task(access_token, list_id, todo_task_id):
+    url = f"https://graph.microsoft.com/v1.0/me/todo/lists/{list_id}/tasks/{todo_task_id}"
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"

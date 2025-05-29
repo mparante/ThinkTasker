@@ -314,7 +314,7 @@ def sync_emails_view(request):
             logger.info(f"  Assigned Priority: {priority_label}")
 
             # Create To Do task
-            todo_task_id = todo.create_todo_task(access_token, subject, preview[:500], deadline)
+            todo_task_id, todo_list_id = todo.create_todo_task(access_token, subject, preview[:500], deadline)
 
             ExtractedTask.objects.create(
                 user=user,
@@ -326,6 +326,7 @@ def sync_emails_view(request):
                 deadline=deadline,
                 status="Open",
                 todo_task_id=todo_task_id,
+                todo_list_id=todo_list_id,
             )
 
         mark_email_as_read(message_id, access_token)
@@ -355,10 +356,11 @@ def update_task_status(request):
             access_token = _get_graph_token(request)
             if task.todo_task_id:
                 if todo_status == "completed":
-                    todo.mark_todo_task_completed(access_token, task.todo_task_id)
+                    todo.mark_todo_task_completed(access_token, task.todo_list_id, task.todo_task_id)
                 else:
                     todo.update_todo_task(
                         access_token,
+                        task.todo_list_id,
                         task.todo_task_id,
                         title=task.subject,
                         description=task.task_description,
@@ -400,13 +402,14 @@ def create_task(request):
             task.is_actionable = True
             # To Do task creation
             access_token = _get_graph_token(request)
-            todo_task_id = todo.create_todo_task(
+            todo_task_id, todo_list_id = todo.create_todo_task(
                 access_token,
                 task.subject,
                 task.task_description,
                 task.deadline
             )
             task.todo_task_id = todo_task_id
+            task.todo_list_id = todo_list_id
             task.save()
             return redirect("task_list")
     else:
@@ -428,9 +431,10 @@ def edit_task(request, task_id):
             }
             todo_status = todo_status_map.get(updated_task.status.lower(), "notStarted")
             try:
-                todo.update_todo_task(
+                success = todo.update_todo_task(
                     access_token,
-                    updated_task.todo_task_id,
+                    task.todo_list_id,
+                    task.todo_task_id,
                     title=updated_task.subject,
                     description=updated_task.task_description,
                     due_date=updated_task.deadline,
@@ -451,7 +455,7 @@ def delete_task(request, task_id):
     # To Do task deletion
     access_token = _get_graph_token(request)
     if task.todo_task_id:
-        todo.delete_todo_task(access_token, task.todo_task_id)
+        todo.delete_todo_task(access_token, task.todo_list_id, task.todo_task_id)
     task.delete()
     return redirect("task_list")
 
