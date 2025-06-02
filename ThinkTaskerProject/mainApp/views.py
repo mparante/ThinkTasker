@@ -18,9 +18,14 @@ from .forms import ExtractedTaskForm
 from datetime import datetime, timedelta
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from bs4 import BeautifulSoup
 from django.utils import timezone
 from langdetect import detect, LangDetectException
-from . import todo
+from . import todo, task_description
+
+# import nltk
+# nltk.download('punkt_tab')
+# nltk.download('stopwords')
 
 TFIDF_MAX = 20.0
 CF_MAX = 2.0
@@ -320,7 +325,7 @@ def sync_emails_view(request):
                 user=user,
                 email=pe,
                 subject=subject,
-                task_description=preview[:500],
+                task_description = task_description.extract_task_from_email(clean_email_text(full_body)),
                 actionable_patterns=actionable_list,
                 priority=priority_label,
                 deadline=deadline,
@@ -431,7 +436,7 @@ def edit_task(request, task_id):
             }
             todo_status = todo_status_map.get(updated_task.status.lower(), "notStarted")
             try:
-                success = todo.update_todo_task(
+                todo.update_todo_task(
                     access_token,
                     task.todo_list_id,
                     task.todo_task_id,
@@ -468,7 +473,8 @@ def help_docs(request):
     return render(request, "help_docs.html")
 
 def clean_email_text(text):
-    text = re.sub(r"(?i)(Best regards|Regards|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
+    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+    text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
     text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
     tokens = word_tokenize(text.lower())
     stop_words = set(stopwords.words('english'))

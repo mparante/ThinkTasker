@@ -187,3 +187,6 @@ LOGGING = {
         },
     },
 }
+
+HF_TOKEN = "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"
+HUGGINGFACEHUB_API_TOKEN = "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"

@@ -22,3 +22,6 @@ media/
 .vscode/
 .idea/
 .DS_Store
+
+# LLM
+ThinkTaskerProject/Llama-3.1-8B-Instruct/

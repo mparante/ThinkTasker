@@ -33,14 +33,14 @@
                     <strong>Priority:</strong>
                     <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
                 </p>
-                {% if task.actionable_patterns %}
+                {% comment %} {% if task.actionable_patterns %}
                     <div class="mt-2">
                         <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
                         {% for pat in task.actionable_patterns %}
                             <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
                         {% endfor %}
                     </div>
-                {% endif %}
+                {% endif %} {% endcomment %}
             </div>
             {% endfor %}
         {% else %}
@@ -71,14 +71,14 @@
                     <strong>Priority:</strong>
                     <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
                 </p>
-                {% if task.actionable_patterns %}
+                {% comment %} {% if task.actionable_patterns %}
                     <div class="mt-2">
                         <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
                         {% for pat in task.actionable_patterns %}
                             <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
                         {% endfor %}
                     </div>
-                {% endif %}
+                {% endif %} {% endcomment %}
             </div>
             {% endfor %}
         {% else %}
@@ -109,14 +109,14 @@
                     <strong>Priority:</strong>
                     <span class="priority-{{ task.priority|lower }}">{{ task.priority|default:"-" }}</span>
                 </p>
-                {% if task.actionable_patterns %}
+                {% comment %} {% if task.actionable_patterns %}
                     <div class="mt-2">
                         <span class="badge bg-success fw-semibold px-2 py-1">Actionable</span>
                         {% for pat in task.actionable_patterns %}
                             <span class="badge bg-light text-dark border me-1">{{ pat.pattern|default:pat }}</span>
                         {% endfor %}
                     </div>
-                {% endif %}
+                {% endif %} {% endcomment %}
             </div>
             {% endfor %}
         {% else %}
