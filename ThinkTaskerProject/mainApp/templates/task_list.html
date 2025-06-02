@@ -42,11 +42,18 @@
                 <td>{{ task.task_description }}</td>
                 <td>{{ task.priority }}</td>
                 <td>{{ task.status }}</td>
-                <td>{% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}</td>
+                <td>{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal"
                             data-bs-target="#taskModal"
-                            onclick="openTaskModal({{ task.id }}, '{{ task.subject|escapejs }}', '{{ task.task_description|escapejs }}', '{{ task.priority }}', '{{ task.status }}', '{{ task.deadline|date:"Y-m-d\TH:i" }}')">Edit</button>
+                            onclick="openTaskModal(
+                                '{{ task.id }}',
+                                '{{ task.subject|escapejs }}',
+                                '{{ task.task_description|escapejs }}',
+                                '{{ task.priority|escapejs }}',
+                                '{{ task.status|escapejs }}',
+                                '{{ task.deadline|date:"F d H:i" }}'
+                            )">Edit</button>
                     <button class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal"
                             data-bs-target="#deleteModal"
                             onclick="confirmDelete({{ task.id }}, '{{ task.subject|escapejs }}')">Delete</button>

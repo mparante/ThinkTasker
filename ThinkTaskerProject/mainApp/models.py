@@ -56,6 +56,7 @@ class ProcessedEmail(models.Model):
     is_new = models.BooleanField(default=True)
     web_link = models.URLField(max_length=1024, blank=True, null=True)
     is_reference = models.BooleanField(default=False)
+    to_recipients = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"{self.subject} - Actionable: {self.is_actionable}"

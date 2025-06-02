@@ -27,7 +27,7 @@
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"F d H:i" }}</p>
                 {% endif %}
                 <p class="task-priority">
                     <strong>Priority:</strong>
@@ -65,7 +65,7 @@
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"F d H:i" }}</p>
                 {% endif %}
                 <p class="task-priority">
                     <strong>Priority:</strong>
@@ -103,7 +103,7 @@
                 </h4>
                 <p class="task-description">{{ task.task_description }}</p>
                 {% if task.deadline %}
-                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"M d, Y H:i" }}</p>
+                    <p class="task-deadline"><strong>Deadline:</strong> {{ task.deadline|date:"F d H:i" }}</p>
                 {% endif %}
                 <p class="task-priority">
                     <strong>Priority:</strong>

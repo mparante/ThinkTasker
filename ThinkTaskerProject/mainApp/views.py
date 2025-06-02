@@ -29,10 +29,10 @@ from . import todo, task_description
 
 TFIDF_MAX = 20.0
 CF_MAX = 2.0
+WORK_START = 9
+WORK_END = 18
 
 logger = logging.getLogger(__name__)
-#nltk.download('punkt')
-#nltk.download('stopwords')
 
 def is_english(text):
     try:
@@ -206,7 +206,7 @@ def sync_emails_view(request):
         url = (
             f"https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages"
             f"?$filter=receivedDateTime ge {received_after}"
-            "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance"
+            "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
             "&$top=50"
         )
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -249,11 +249,20 @@ def sync_emails_view(request):
         text_for_extraction = subject + " " + full_body
         is_flagged = m.get("flag", {}).get("flagStatus", "") == "flagged"
         is_important = m.get("importance", "") == "high"
+        to_recipients = [
+            r.get("emailAddress", {}).get("address", "").lower()
+            for r in m.get("toRecipients", [])
+        ]
+        web_link = m.get("webLink", "")
 
         if not is_english(text_for_extraction):
             continue
 
-        web_link = m.get("webLink", "")
+        if user.email.lower() not in to_recipients:
+            continue
+
+        print(user.email.lower())
+        print(to_recipients)
 
         if ProcessedEmail.objects.filter(message_id=message_id, user=user).exists():
             continue
@@ -270,6 +279,7 @@ def sync_emails_view(request):
             is_actionable=is_actionable,
             web_link=web_link,
             is_reference=True if is_actionable else False,
+            to_recipients=to_recipients,
         )
 
         # Logs
@@ -305,8 +315,8 @@ def sync_emails_view(request):
             alpha, beta = 0.7, 0.3
             score = alpha * tfidf_norm + beta * cf_norm
 
-            deadline = extract_deadline(full_body)
-            priority_label = assign_priority(score, deadline)
+            extracted_deadline = extract_deadline(full_body, sent_date=parse_iso_datetime(m.get("receivedDateTime")))
+            deadline, priority = assign_deadline_and_priority(request.user, extracted_deadline, score)
 
             # Logs
             logger.info(f"Processing email '{subject}' for user '{user.email}':")
@@ -316,7 +326,7 @@ def sync_emails_view(request):
             logger.info(f"  TFIDF Norm: {tfidf_norm}, CF Norm: {cf_norm}")
             logger.info(f"  Score: {score}")
             logger.info(f"  Extracted Deadline: {deadline}")
-            logger.info(f"  Assigned Priority: {priority_label}")
+            logger.info(f"  Assigned Priority: {priority}")
 
             # Create To Do task
             todo_task_id, todo_list_id = todo.create_todo_task(access_token, subject, preview[:500], deadline)
@@ -325,9 +335,9 @@ def sync_emails_view(request):
                 user=user,
                 email=pe,
                 subject=subject,
-                task_description = task_description.extract_task_from_email(clean_email_text(full_body)),
+                task_description = task_description.extract_task_from_email(clean_email_for_summarization(full_body)),
                 actionable_patterns=actionable_list,
-                priority=priority_label,
+                priority=priority,
                 deadline=deadline,
                 status="Open",
                 todo_task_id=todo_task_id,
@@ -481,6 +491,12 @@ def clean_email_text(text):
     tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
     return tokens
 
+def clean_email_for_summarization(text):
+    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+    text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
+    text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
+    return text.strip()
+
 def compute_tf(term, doc_tokens):
     count = doc_tokens.count(term)
     return 1 + math.log10(count) if count > 0 else 0
@@ -501,6 +517,120 @@ def get_contextual_weight(term):
     high_priority_terms = {'urgent', 'ASAP', 'emergency', 'field issue', 'escalate', 'critical', 'immediate attention'}
     return 2.0 if term in high_priority_terms else 1.0
 
+def extract_deadline(text, sent_date=None):
+    patterns = [
+        r'\bby ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
+        r'\bon ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
+        r'\bin (\d+) days?',
+        r'\b(tomorrow|today|now|next week|next month|next [A-Za-z]+)\b',
+        r'(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})',         # 2025/06/06 or 2025.06.06
+        r'(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})',         # 06/24/2025 or 06.24.2025
+        r'(\d{1,2}:\d{2}(?: ?[APMapm]{2})?)',         # 10:00, 3:00 PM
+        r'(\d{1,2} [A-Za-z]+ \d{4})',                 # 6 June 2025
+        r'([A-Za-z]+ \d{1,2},? \d{4})',               # June 6, 2025
+    ]
+    now = sent_date if sent_date else timezone.now()
+    # Default time for deadlines when the date string does not specify a time
+    base_hour = 10
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            date_str = match.group(1) if match.groups() else match.group(0)
+            date_str = date_str.strip()
+            try:
+                # Always parse with dayfirst=False (US style) MM/DD/YYYY
+                deadline = dateutil.parser.parse(date_str, default=now, fuzzy=True, dayfirst=False)
+                # Fix: "TypeError: can't compare offset-naive and offset-aware datetimes"
+                # Make deadline timezone-aware
+                if timezone.is_naive(deadline):
+                    deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
+                deadline = deadline.replace(second=0, microsecond=0)
+                # If no explicit time, set to base_hour
+                if 'AM' not in date_str.upper() and 'PM' not in date_str.upper() and deadline.hour == 0:
+                    deadline = deadline.replace(hour=base_hour, minute=0)
+                if deadline.year < 2000:
+                    continue
+                return deadline
+            except Exception:
+                pass
+
+            lc = date_str.lower()
+            if 'today' in lc or 'now' in lc:
+                dt = now.replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'tomorrow' in lc:
+                dt = add_weekdays(now, 1).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'days' in lc:
+                days = int(re.findall(r'\d+', date_str)[0])
+                dt = add_weekdays(now, days).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'next week' in lc:
+                days_ahead = (0 - now.weekday() + 7) % 7 or 7
+                dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'next month' in lc:
+                first = first_of_next_month(now)
+                dt = first.replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif pattern.startswith('next ([A-Za-z]+)'):
+                weekday_str = match.group(1)
+                weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
+                if weekday_str.lower() in weekdays:
+                    days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
+                    if days_ahead == 0:
+                        days_ahead = 7
+                    dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                    return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+    return None
+
+def assign_deadline_and_priority(user, extracted_deadline, score):
+    if score >= 0.7:
+        base_priority = 'Urgent'
+    elif score >= 0.4:
+        base_priority = 'Important'
+    elif score >= 0.2:
+        base_priority = 'Medium'
+    else:
+        base_priority = 'Low'
+
+    now = timezone.now()
+
+    # Fix: "TypeError: can't compare offset-naive and offset-aware datetimes"
+    # Make deadline timezone-aware
+    if extracted_deadline and timezone.is_naive(extracted_deadline):
+        extracted_deadline = timezone.make_aware(extracted_deadline, timezone.get_current_timezone())
+
+    if extracted_deadline:
+        day = extracted_deadline if extracted_deadline > now else add_weekdays(now, 1)
+        deadline = get_next_available_hour(user, day, urgent=(base_priority == 'Urgent'))
+    else:
+        deadline = get_next_available_hour(user, add_weekdays(now, 1), urgent=(base_priority == 'Urgent'))
+
+    return deadline, base_priority
+
+# Find the next available slot on 'day' between 9am and 6pm for this user.
+# Urgent tasks are always at 9am unless taken, then next available hour.
+def get_next_available_hour(user, day, urgent=False):
+    # Get all deadlines for the user on this day
+    existing_deadlines = list(
+        ExtractedTask.objects.filter(
+            user=user,
+            deadline__date=day.date()
+        ).values_list('deadline', flat=True)
+    )
+    # List of taken hours on that day
+    taken_hours = {d.hour for d in existing_deadlines if d}
+    # Earliest possible slot
+    for hour in range(WORK_START, WORK_END+1):
+        if hour not in taken_hours:
+            if urgent and hour != WORK_START:
+                continue  # Only 9am for urgent unless taken
+            return day.replace(hour=hour, minute=0, second=0, microsecond=0)
+    # If no slot, return 9am next working day
+    next_day = add_weekdays(day, 1)
+    return next_day.replace(hour=WORK_START, minute=0, second=0, microsecond=0)
+
 def add_weekdays(start, days):
     current = start
     added = 0
@@ -516,84 +646,6 @@ def first_of_next_month(dt):
     else:
         return dt.replace(month=dt.month+1, day=1)
 
-def extract_deadline(text, sent_date=None):
-    patterns = [
-        r'by ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
-        r'on ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
-        r'in (\d+) days?',
-        r'tomorrow',
-        r'today',
-        r'now',
-        r'next week',
-        r'next month',
-        r'next ([A-Za-z]+)',
-    ]
-    now = sent_date if sent_date is not None else timezone.now()
-
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if not match:
-            continue
-
-        date_str = match.group(1) if match.groups() else match.group(0)
-        try:
-            date_str_lc = date_str.lower()
-            if 'today' in date_str_lc or 'now' in date_str_lc:
-                return now
-            elif 'tomorrow' in date_str_lc:
-                return add_weekdays(now, 1)
-            elif 'days' in date_str_lc:
-                days = int(re.findall(r'\d+', date_str)[0])
-                return add_weekdays(now, days)
-            elif 'next week' in date_str_lc:
-                days_ahead = (0 - now.weekday() + 7) % 7 or 7
-                return now + timedelta(days=days_ahead)
-            elif 'next month' in date_str_lc:
-                return first_of_next_month(now)
-            elif pattern.startswith('next ([A-Za-z]+)'):
-                weekday_str = match.group(1)
-                weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
-                if weekday_str.lower() in weekdays:
-                    days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
-                    if days_ahead == 0:
-                        days_ahead = 7
-                    return now + timedelta(days=days_ahead)
-            else:
-                deadline = dateutil.parser.parse(date_str, fuzzy=True, default=now)
-                if deadline < now:
-                    try:
-                        deadline = deadline.replace(year=now.year + 1)
-                    except Exception:
-                        pass
-                return deadline
-        except Exception:
-            continue
-
-    return None
-
-def assign_priority(score, extracted_deadline):
-    if score >= 0.7:
-        base_priority = 'Important'
-    elif score >= 0.4:
-        base_priority = 'Medium'
-    else:
-        base_priority = 'Low'
-
-    if extracted_deadline:
-        now = timezone.now()
-        delta = (extracted_deadline - now).days
-        
-        if delta <= 3:
-            return 'Urgent'
-        elif 4 <= delta <= 5:
-            return 'Important'
-        elif delta > 30:
-            return 'Low'
-        else:
-            return base_priority
-    else:
-        return base_priority
-
 def fetch_all_emails(access_token, folder="Inbox"):
     headers = {
         "Authorization": f"Bearer {access_token}"
@@ -601,7 +653,7 @@ def fetch_all_emails(access_token, folder="Inbox"):
     emails = []
     url = (
         f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
-        "?$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance"
+        "?$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
         "&$top=50"
     )
     while url:
@@ -621,7 +673,7 @@ def fetch_unread_emails(access_token, folder="Inbox"):
     url = (
         f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
         "?$filter=isRead eq false"
-        "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance"
+        "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
         "&$top=50"
     )
     while url:
