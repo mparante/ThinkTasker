@@ -21,7 +21,8 @@ from nltk.tokenize import word_tokenize
 from bs4 import BeautifulSoup
 from django.utils import timezone
 from langdetect import detect, LangDetectException
-from . import todo, task_description
+from collections import defaultdict
+from . import todo, task_description, read_email
 
 # import nltk
 # nltk.download('punkt_tab')
@@ -198,6 +199,7 @@ def extract_actionable_items(text):
 def sync_emails_view(request):
     user = request.user
     access_token = _get_graph_token(request)
+    now = timezone.now()
 
     last_sync = user.last_synced_datetime
     all_emails = []
@@ -220,16 +222,12 @@ def sync_emails_view(request):
     else:
         all_emails = fetch_all_emails(access_token)
 
-
     all_docs_tokens = get_reference_tokens()
     for m in all_emails:
         subject = m.get("subject", "")
         message_id = m["id"]
         pe = ProcessedEmail.objects.filter(message_id=message_id, user=user).first()
-        if pe and hasattr(pe, "body_preview"):
-            full_body = pe.body_preview
-        else:
-            full_body = fetch_full_email_body(message_id, access_token)
+        full_body = pe.body_preview if pe and hasattr(pe, "body_preview") else fetch_full_email_body(message_id, access_token)
         combined_text = subject + " " + full_body
         if is_english(combined_text):
             all_docs_tokens.append(clean_email_text(combined_text))
@@ -237,9 +235,12 @@ def sync_emails_view(request):
     unread_emails = fetch_unread_emails(access_token)
     if not unread_emails:
         messages.info(request, "No new unread emails to process.")
-        user.last_synced_datetime = timezone.now()
+        user.last_synced_datetime = now
         user.save(update_fields=['last_synced_datetime'])
         return redirect("outlook-inbox")
+
+    actionable_new_tasks = []
+    message_ids_to_mark_read = []
 
     for m in unread_emails:
         subject = m.get("subject", "")
@@ -254,60 +255,23 @@ def sync_emails_view(request):
             for r in m.get("toRecipients", [])
         ]
         web_link = m.get("webLink", "")
-
-        if not is_english(text_for_extraction):
-            continue
-
-        if user.email.lower() not in to_recipients:
-            continue
-
-        print(user.email.lower())
-        print(to_recipients)
-
-        if ProcessedEmail.objects.filter(message_id=message_id, user=user).exists():
-            continue
+        if not is_english(text_for_extraction): continue
+        if user.email.lower() not in to_recipients: continue
+        if ProcessedEmail.objects.filter(message_id=message_id, user=user).exists(): continue
 
         actionable_patterns = extract_actionable_items(subject + " " + preview)
-        actionable_list = [{"pattern": p.pattern, "priority": p.priority} for p in actionable_patterns]
         is_actionable = bool(actionable_patterns)
-
-        pe = ProcessedEmail.objects.create(
-            user=user,
-            message_id=message_id,
-            subject=subject,
-            body_preview=preview,
-            is_actionable=is_actionable,
-            web_link=web_link,
-            is_reference=True if is_actionable else False,
-            to_recipients=to_recipients,
-        )
-
-        # Logs
-        logger.info(
-            f"ProcessedEmail created for user '{user.email}': "
-            f"MessageID='{message_id}', Subject='{subject}', IsActionable={is_actionable}, "
-            f"WebLink='{web_link}', IsReference={pe.is_reference}"
-        )
-        
         if is_actionable:
             cleaned_tokens = clean_email_text(text_for_extraction)
             terms = set(cleaned_tokens)
-            tfidf_sum = 0
-            cf_sum = 0
-            tfidf_details = {}
-            cf_details = {}
-
+            tfidf_sum, cf_sum, ct = 0, 0, 1.0
             for term in terms:
                 tf = compute_tf(term, cleaned_tokens)
                 idf = compute_idf(term, all_docs_tokens)
                 cf = compute_cf(term, all_docs_tokens)
-                ct = get_contextual_weight(term)
-                tfidf = tf * idf * ct
-                tfidf_sum += tfidf
+                ct = max(ct, get_contextual_weight(term))
+                tfidf_sum += tf * idf * ct
                 cf_sum += cf
-                tfidf_details[term] = {'tf': tf, 'idf': idf, 'ct': ct, 'tfidf': tfidf}
-                cf_details[term] = cf
-            
             if is_flagged or is_important:
                 ct += 1.0
             tfidf_norm = min((tfidf_sum * ct) / TFIDF_MAX, 1)
@@ -316,41 +280,64 @@ def sync_emails_view(request):
             score = alpha * tfidf_norm + beta * cf_norm
 
             extracted_deadline = extract_deadline(full_body, sent_date=parse_iso_datetime(m.get("receivedDateTime")))
-            deadline, priority = assign_deadline_and_priority(request.user, extracted_deadline, score)
+            actionable_new_tasks.append({
+                "subject": subject,
+                "body": full_body,
+                "preview": preview,
+                "score": score,
+                "actionable_patterns": [{"pattern": p.pattern, "priority": p.priority} for p in actionable_patterns],
+                "priority": (
+                    "Urgent" if score >= 0.7 else
+                    "Important" if score >= 0.4 else
+                    "Medium" if score >= 0.2 else
+                    "Low"
+                ),
+                "extracted_deadline": extracted_deadline,
+                "message_id": message_id,
+                "web_link": web_link,
+                "to_recipients": to_recipients,
+                "raw_email": m,
+            })
+            message_ids_to_mark_read.append(message_id)
 
-            # Logs
-            logger.info(f"Processing email '{subject}' for user '{user.email}':")
-            logger.info(f"  TF-IDF Details: {tfidf_details}")
-            logger.info(f"  CF Details: {cf_details}")
-            logger.info(f"  TFIDF Sum: {tfidf_sum}, CF Sum: {cf_sum}")
-            logger.info(f"  TFIDF Norm: {tfidf_norm}, CF Norm: {cf_norm}")
-            logger.info(f"  Score: {score}")
-            logger.info(f"  Extracted Deadline: {deadline}")
-            logger.info(f"  Assigned Priority: {priority}")
+    assign_deadline_and_priority_batch(user, actionable_new_tasks)
 
-            # Create To Do task
-            todo_task_id, todo_list_id = todo.create_todo_task(access_token, subject, preview[:500], deadline)
+    for task in actionable_new_tasks:
+        pe = ProcessedEmail.objects.create(
+            user=user,
+            message_id=task["message_id"],
+            subject=task["subject"],
+            body_preview=task["preview"],
+            is_actionable=True,
+            web_link=task["web_link"],
+            is_reference=True,
+            to_recipients=task["to_recipients"],
+        )
+        todo_task_id, todo_list_id = todo.create_todo_task(
+            access_token, task["subject"], task["preview"][:500], task["assigned_deadline"]
+        )
+        ExtractedTask.objects.create(
+            user=user,
+            email=pe,
+            subject=task["subject"],
+            task_description=task_description.extract_task_from_email(clean_email_text(task["body"])),
+            actionable_patterns=task["actionable_patterns"],
+            priority=task["priority"],
+            deadline=task["assigned_deadline"],
+            status="Open",
+            todo_task_id=todo_task_id,
+            todo_list_id=todo_list_id,
+        )
 
-            ExtractedTask.objects.create(
-                user=user,
-                email=pe,
-                subject=subject,
-                task_description = task_description.extract_task_from_email(clean_email_for_summarization(full_body)),
-                actionable_patterns=actionable_list,
-                priority=priority,
-                deadline=deadline,
-                status="Open",
-                todo_task_id=todo_task_id,
-                todo_list_id=todo_list_id,
-            )
+    # Batch mark all processed emails as read
+    if message_ids_to_mark_read:
+        read_email.batch_mark_emails_as_read(message_ids_to_mark_read, access_token)
 
-        mark_email_as_read(message_id, access_token)
-
-    user.last_synced_datetime = timezone.now()
+    user.last_synced_datetime = now
     user.save(update_fields=['last_synced_datetime'])
-
     messages.success(request, "Sync completed! All unread actionable emails were processed and prioritized.")
     return redirect("outlook-inbox")
+
 
 @csrf_exempt
 @login_required
@@ -491,11 +478,11 @@ def clean_email_text(text):
     tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
     return tokens
 
-def clean_email_for_summarization(text):
-    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-    text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
-    text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
-    return text.strip()
+# def clean_email_for_summarization(text):
+#     text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+#     text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
+#     text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
+#     return text.strip()
 
 def compute_tf(term, doc_tokens):
     count = doc_tokens.count(term)
@@ -584,52 +571,90 @@ def extract_deadline(text, sent_date=None):
                     return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
     return None
 
-def assign_deadline_and_priority(user, extracted_deadline, score):
-    if score >= 0.7:
-        base_priority = 'Urgent'
-    elif score >= 0.4:
-        base_priority = 'Important'
-    elif score >= 0.2:
-        base_priority = 'Medium'
-    else:
-        base_priority = 'Low'
+def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
 
-    now = timezone.now()
+    if now is None:
+        now = timezone.now()
+    WORK_START = 9
+    WORK_END = 18
+    LUNCH_BREAK = 12
+    WORK_HOURS = [9, 10, 11, 13, 14, 15, 16, 17, 18]
 
-    # Fix: "TypeError: can't compare offset-naive and offset-aware datetimes"
-    # Make deadline timezone-aware
-    if extracted_deadline and timezone.is_naive(extracted_deadline):
-        extracted_deadline = timezone.make_aware(extracted_deadline, timezone.get_current_timezone())
+    # Group new actionable tasks by day
+    tasks_by_day = defaultdict(list)
+    for t in actionable_tasks:
+        d = t["extracted_deadline"]
+        # If deadline is past (delayed), schedule for today or else use extracted
+        day = (d if d and d >= now else now).astimezone(timezone.get_current_timezone()).date()
+        t["original_day"] = day
+        tasks_by_day[day].append(t)
 
-    if extracted_deadline:
-        day = extracted_deadline if extracted_deadline > now else add_weekdays(now, 1)
-        deadline = get_next_available_hour(user, day, urgent=(base_priority == 'Urgent'))
-    else:
-        deadline = get_next_available_hour(user, add_weekdays(now, 1), urgent=(base_priority == 'Urgent'))
+    # For each day, process all open and new tasks together
+    for day, new_tasks in tasks_by_day.items():
+        # Get all open (DB) tasks for that day
+        existing_tasks = list(
+            ExtractedTask.objects.filter(
+                user=user,
+                deadline__date=day,
+                status="Open"
+            ).order_by('deadline')
+        )
+        combined = []
+        for t in existing_tasks:
+            combined.append({
+                "is_new": False,
+                "obj": t,
+                "priority": t.priority,
+                "subject": t.subject,
+                "deadline": t.deadline,
+            })
+        for t in new_tasks:
+            combined.append({
+                "is_new": True,
+                "obj": t,
+                "priority": t["priority"],
+                "subject": t["subject"],
+                "deadline": t["extracted_deadline"],
+            })
 
-    return deadline, base_priority
+        # Sort high priority first, then earlier deadline first
+        combined.sort(key=lambda x: (-get_priority_rank(x["priority"]), x["deadline"] or now))
 
-# Find the next available slot on 'day' between 9am and 6pm for this user.
-# Urgent tasks are always at 9am unless taken, then next available hour.
-def get_next_available_hour(user, day, urgent=False):
-    # Get all deadlines for the user on this day
-    existing_deadlines = list(
-        ExtractedTask.objects.filter(
-            user=user,
-            deadline__date=day.date()
-        ).values_list('deadline', flat=True)
-    )
-    # List of taken hours on that day
-    taken_hours = {d.hour for d in existing_deadlines if d}
-    # Earliest possible slot
-    for hour in range(WORK_START, WORK_END+1):
-        if hour not in taken_hours:
-            if urgent and hour != WORK_START:
-                continue  # Only 9am for urgent unless taken
-            return day.replace(hour=hour, minute=0, second=0, microsecond=0)
-    # If no slot, return 9am next working day
-    next_day = add_weekdays(day, 1)
-    return next_day.replace(hour=WORK_START, minute=0, second=0, microsecond=0)
+        assigned_tasks = []
+        hour_idx = 0
+        for task in combined:
+            # Assign only to defined work hours (skip lunch)
+            if hour_idx >= len(WORK_HOURS):
+                break  # overflow handled below
+            assign_time = datetime.combine(day, datetime.min.time()).replace(
+                hour=WORK_HOURS[hour_idx], minute=0, second=0, microsecond=0,
+                tzinfo=timezone.get_current_timezone()
+            )
+            task["assigned_deadline"] = assign_time
+            assigned_tasks.append(task)
+            hour_idx += 1
+
+        # Recursively overflow to next working day if too many tasks
+        overflow = combined[len(assigned_tasks):]
+        if overflow:
+            for t in overflow:
+                t["extracted_deadline"] = add_weekdays(datetime.combine(day, datetime.min.time()), 1)
+            assign_deadline_and_priority_batch(user, [t["obj"] for t in overflow], now=add_weekdays(now, 1))
+
+        # Bulk update all existing tasks that need a new deadline
+        tasks_to_update = []
+        for t in assigned_tasks:
+            if not t["is_new"] and t["obj"].deadline != t["assigned_deadline"]:
+                t["obj"].deadline = t["assigned_deadline"]
+                tasks_to_update.append(t["obj"])
+            elif t["is_new"]:
+                t["obj"]["assigned_deadline"] = t["assigned_deadline"]
+
+        if tasks_to_update:
+            ExtractedTask.objects.bulk_update(tasks_to_update, ['deadline'])
+
+def get_priority_rank(priority):
+    return {"Urgent": 3, "Important": 2, "Medium": 1, "Low": 0}.get(priority, 0)
 
 def add_weekdays(start, days):
     current = start
