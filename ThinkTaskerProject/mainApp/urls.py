@@ -19,4 +19,5 @@ urlpatterns = [
     path("settings/", views.settings_view, name="settings"),
     path("help-docs/", views.help_docs, name="help_docs"),
     path("logout/", LogoutView.as_view(next_page="login"), name="logout"),
+    path('tasks/recommended-deadline/', views.recommended_deadline, name='recommended_deadline'),
 ]

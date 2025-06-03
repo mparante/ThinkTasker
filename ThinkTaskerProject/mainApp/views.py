@@ -199,7 +199,6 @@ def extract_actionable_items(text):
 def sync_emails_view(request):
     user = request.user
     access_token = _get_graph_token(request)
-    now = timezone.now()
 
     last_sync = user.last_synced_datetime
     all_emails = []
@@ -235,7 +234,7 @@ def sync_emails_view(request):
     unread_emails = fetch_unread_emails(access_token)
     if not unread_emails:
         messages.info(request, "No new unread emails to process.")
-        user.last_synced_datetime = now
+        user.last_synced_datetime = timezone.now()
         user.save(update_fields=['last_synced_datetime'])
         return redirect("outlook-inbox")
 
@@ -333,7 +332,7 @@ def sync_emails_view(request):
     if message_ids_to_mark_read:
         read_email.batch_mark_emails_as_read(message_ids_to_mark_read, access_token)
 
-    user.last_synced_datetime = now
+    user.last_synced_datetime = timezone.now()
     user.save(update_fields=['last_synced_datetime'])
     messages.success(request, "Sync completed! All unread actionable emails were processed and prioritized.")
     return redirect("outlook-inbox")
@@ -402,6 +401,14 @@ def create_task(request):
             task = form.save(commit=False)
             task.user = request.user
             task.is_actionable = True
+            
+            # Use user-set deadline if provided, else auto-assign
+            deadline_str = request.POST.get("deadline")
+            if deadline_str:
+                task.deadline = timezone.make_aware(datetime.strptime(deadline_str, "%Y-%m-%dT%H:%M"))
+            else:
+                task.deadline = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
+
             # To Do task creation
             access_token = _get_graph_token(request)
             todo_task_id, todo_list_id = todo.create_todo_task(
@@ -477,12 +484,6 @@ def clean_email_text(text):
     stop_words = set(stopwords.words('english'))
     tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
     return tokens
-
-# def clean_email_for_summarization(text):
-#     text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-#     text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
-#     text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
-#     return text.strip()
 
 def compute_tf(term, doc_tokens):
     count = doc_tokens.count(term)
@@ -575,9 +576,6 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
 
     if now is None:
         now = timezone.now()
-    WORK_START = 9
-    WORK_END = 18
-    LUNCH_BREAK = 12
     WORK_HOURS = [9, 10, 11, 13, 14, 15, 16, 17, 18]
 
     # Group new actionable tasks by day
@@ -620,12 +618,19 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
         # Sort high priority first, then earlier deadline first
         combined.sort(key=lambda x: (-get_priority_rank(x["priority"]), x["deadline"] or now))
 
+        local_now = timezone.localtime(now)
+        if day == local_now.date():
+            # For today, assign after current hour (in Asia/Tokyo)
+            hour_idx = 0
+            while hour_idx < len(WORK_HOURS) and WORK_HOURS[hour_idx] <= local_now.hour:
+                hour_idx += 1
+        else:
+            hour_idx = 0
+
         assigned_tasks = []
-        hour_idx = 0
         for task in combined:
-            # Assign only to defined work hours (skip lunch)
             if hour_idx >= len(WORK_HOURS):
-                break  # overflow handled below
+                break
             assign_time = datetime.combine(day, datetime.min.time()).replace(
                 hour=WORK_HOURS[hour_idx], minute=0, second=0, microsecond=0,
                 tzinfo=timezone.get_current_timezone()
@@ -652,6 +657,28 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
 
         if tasks_to_update:
             ExtractedTask.objects.bulk_update(tasks_to_update, ['deadline'])
+
+def get_next_available_hour(user, day):
+    existing_deadlines = list(
+        ExtractedTask.objects.filter(
+            user=user,
+            deadline__date=day.date()
+        ).values_list('deadline', flat=True)
+    )
+    taken_hours = {d.hour for d in existing_deadlines if d}
+    for hour in range(WORK_START, WORK_END + 1):
+        if hour not in taken_hours:
+            return day.replace(hour=hour, minute=0, second=0, microsecond=0)
+    next_day = add_weekdays(day, 1)
+    return next_day.replace(hour=WORK_START, minute=0, second=0, microsecond=0)
+
+@login_required
+def recommended_deadline(request):
+    priority = request.GET.get("priority", "Medium")
+    urgent = (priority == "Urgent")
+    recommended_dt = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
+    recommended_str = recommended_dt.strftime("%Y-%m-%dT%H:%M")
+    return JsonResponse({"recommended_deadline": recommended_str})
 
 def get_priority_rank(priority):
     return {"Urgent": 3, "Important": 2, "Medium": 1, "Low": 0}.get(priority, 0)
