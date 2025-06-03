@@ -35,6 +35,15 @@ WORK_END = 18
 
 logger = logging.getLogger(__name__)
 
+priority_order = Case(
+    When(priority='Urgent', then=Value(1)),
+    When(priority='Important', then=Value(2)),
+    When(priority='Medium', then=Value(3)),
+    When(priority='Low', then=Value(4)),
+    default=Value(5),
+    output_field=IntegerField()
+)
+
 def is_english(text):
     try:
         return detect(text) == 'en'
@@ -156,11 +165,15 @@ def parse_iso_datetime(dt_str):
 
 @login_required
 def index(request):
-    actionable_tasks = ExtractedTask.objects.filter(
-        user=request.user
-    ).filter(
-        Q(email__is_actionable=True) | Q(email__isnull=True)
-    ).distinct()
+    actionable_tasks = (
+        ExtractedTask.objects
+        .filter(user=request.user)
+        .filter(Q(email__is_actionable=True) | Q(email__isnull=True))
+        .annotate(priority_rank=priority_order)
+        .order_by('priority_rank', 'deadline', '-created_at')
+        .distinct()
+    )
+    
     todo_tasks = actionable_tasks.filter(status="Open")
     ongoing_tasks = actionable_tasks.filter(status="Ongoing")
     completed_tasks = actionable_tasks.filter(status="Completed")
@@ -169,6 +182,7 @@ def index(request):
         "ongoing_tasks": ongoing_tasks,
         "completed_tasks": completed_tasks,
     }
+    
     return render(request, "index.html", context)
 
 @login_required
@@ -382,14 +396,6 @@ def task_list(request):
             Q(subject__icontains=query) |
             Q(task_description__icontains=query)
         )
-    priority_order = Case(
-        When(priority='Urgent', then=Value(1)),
-        When(priority='Important', then=Value(2)),
-        When(priority='Medium', then=Value(3)),
-        When(priority='Low', then=Value(4)),
-        default=Value(5),
-        output_field=IntegerField()
-    )
     tasks = tasks.annotate(priority_rank=priority_order).order_by('priority_rank', 'deadline', '-created_at')
     return render(request, "task_list.html", {"tasks": tasks, "query": query})
 
