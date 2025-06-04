@@ -150,3 +150,165 @@ body {
 .dropdown-item:active, .dropdown-item:focus, .dropdown-item:hover {
     background: #f2f3f5;
 }
+
+.completed-task {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.show-completed-row {
+  text-align: left !important;
+  background: #f8f9fa;
+  border-top: 1px solid #eee;
+}
+
+.show-completed-link {
+  color: #555 !important;
+  font-weight: 500;
+  font-size: 1em;
+  text-decoration: none;
+  display: inline-block;
+  transition: color 0.2s;
+  background: none;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+.show-completed-link:hover,
+.show-completed-link:focus {
+  color: #222 !important;
+  text-decoration: underline;
+  background: #f0f0f0;
+  border: 1px solid #e0e0e0;
+}
+
+.calendar-day {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 68px;
+    min-width: 48px;
+    transition: background 0.15s, box-shadow 0.15s;
+}
+
+.calendar-day-number {
+    display: inline-block;
+    font-size: 1.12em;
+    font-weight: 500;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    line-height: 36px;
+    text-align: center;
+    transition: box-shadow 0.15s;
+}
+
+/* Day rings for busy/full */
+/* .calendar-day-ring-full .calendar-day-number {
+    border: 2.5px solid #e57373;
+    background: #e57373;
+}
+.calendar-day-ring-busy .calendar-day-number {
+    border: 2px solid #ffb74d;
+    background: #ffb74d;
+}
+.calendar-day-dot-free .calendar-day-number {
+    border: 2px solid #81c784;
+    background: #81c784;
+} */
+
+.calendar-task-badge {
+    position: absolute;
+    top: 6px;
+    right: 12px;
+    font-size: 0.8em;
+    background: red;
+    color: #fff;
+    border-radius: 12px;
+    padding: 0 7px;
+    min-width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+/* Hover feedback */
+.calendar-td-clickable:hover .calendar-day-number {
+    background: #f8f9fa;
+    box-shadow: #f8f9fa;
+    cursor: pointer;
+}
+
+/* Today outline */
+.calendar-day-today .calendar-day-number {
+    border: solid #8b8d8f;
+    background: #f8f9fa;
+}
+
+/* Empty cell style */
+.calendar-td-empty {
+    background: #f8f9fa !important;
+}
+
+/* Calendar Container & Card */
+.calendar-container {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    gap: 2rem;
+}
+.calendar-card {
+    box-shadow: 0 2px 16px 0 rgba(0,0,0,.06);
+    border-radius: 1.5rem;
+    border: 0;
+    padding: 2rem;
+}
+
+/* Calendar Header */
+.calendar-header-gap {
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+.calendar-month-label {
+    min-width: 120px;
+    display: inline-block;
+}
+
+/* Calendar Table Columns */
+.calendar-col-sml { width: 10%; }
+.calendar-col { width: 16%; }
+
+/* Calendar Table Data */
+.calendar-td {
+    padding: 0 !important;
+    border: 0 !important;
+    height: 100px;
+    vertical-align: middle !important;
+    position: relative;
+    background: #fff;
+    transition: background 0.15s;
+}
+.calendar-td-empty {
+    background: #f8f9fa !important;
+}
+.calendar-td-clickable {
+    cursor: pointer;
+}
+/* .calendar-td-clickable:hover .calendar-day {
+    box-shadow: 0 0 0 2px #dee2e6;
+    background: #f1f3f7;
+} */
+
+/* Responsive fix for the calendar table */
+@media (max-width: 1200px) {
+    .calendar-card { padding: 1rem; }
+    .calendar-day { min-height: 60px; }
+}
+@media (max-width: 900px) {
+    .calendar-day { min-width: 35px; min-height: 40px; font-size: 0.9em; }
+}

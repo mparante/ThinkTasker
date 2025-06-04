@@ -23,7 +23,7 @@ from django.utils import timezone
 from langdetect import detect, LangDetectException
 from collections import defaultdict
 from . import todo, task_description, read_email
-
+from calendar import month_name
 # import nltk
 # nltk.download('punkt_tab')
 # nltk.download('stopwords')
@@ -185,22 +185,44 @@ def index(request):
     ongoing_tasks = base_qs.filter(status="Ongoing").order_by('priority_rank', 'deadline')
     completed_tasks = base_qs.filter(status="Completed").order_by('priority_rank', 'deadline')
 
+    active_tasks = all_tasks.exclude(status="Completed").order_by('priority_rank', 'status_rank', 'deadline')
+
+    today = timezone.localtime(timezone.now())
+    year = int(request.GET.get('year', today.year))
+    month = int(request.GET.get('month', today.month))
+    calendar_weeks = get_calendar_weeks(request.user, year, month)
+    has_tasks = any(any(day['task_count'] > 0 for day in week) for week in calendar_weeks)
+
     return render(request, "dashboard.html", {
+        # For Kanban View
         "todo_tasks": todo_tasks,
         "ongoing_tasks": ongoing_tasks,
         "completed_tasks": completed_tasks,
+        # For Task List View
         "all_tasks": all_tasks,
+        "active_tasks": active_tasks,
         "query": query,
+        # For Calendar View
+        'calendar_weeks': calendar_weeks,
+        'year': year,
+        'month': month,
+        'month_name': month_name[month],
+        'today': today,
+        'has_tasks': has_tasks,
     })
 
 @login_required
-def outlook_inbox(request):
-    processed_emails = ProcessedEmail.objects.filter(user=request.user).order_by("-processed_at")
-    last_synced = request.user.last_synced_datetime
-    return render(request, "emails.html", {
-        "processed_emails": processed_emails,
-        "last_synced": last_synced,
-    })
+def tasks_by_date(request):
+    date_str = request.GET.get('date')
+    tasks = ExtractedTask.objects.filter(
+        user=request.user, 
+        deadline__date=date_str
+    ).order_by('priority', 'deadline')
+    result = [{
+        'subject': t.subject,
+        'priority': t.priority,
+    } for t in tasks]
+    return JsonResponse({'tasks': result})
 
 def extract_actionable_items(text):
     patterns = ActionablePattern.objects.filter(is_active=True)
@@ -232,7 +254,16 @@ def sync_emails_view(request):
     ).order_by('deadline')
 
     if overdue_tasks:
-        assign_deadline_and_priority_batch(user, overdue_tasks, now=now)
+        overdue_task_dicts = []
+        for t in overdue_tasks:
+            overdue_task_dicts.append({
+                "subject": t.subject,
+                "priority": t.priority,
+                "extracted_deadline": t.deadline,
+                "is_new": False,
+                "obj": t,
+            })
+        assign_deadline_and_priority_batch(user, overdue_task_dicts, now=now)
 
     last_sync = user.last_synced_datetime
     all_emails = []
@@ -267,10 +298,14 @@ def sync_emails_view(request):
 
     unread_emails = fetch_unread_emails(access_token)
     if not unread_emails:
-        messages.info(request, "No new unread emails to process.")
         user.last_synced_datetime = timezone.now()
         user.save(update_fields=['last_synced_datetime'])
-        return redirect("outlook-inbox")
+        return JsonResponse({
+            "success": True,
+            "new_tasks": [],
+            "last_synced": timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M"),
+            "message": "No new unread emails to process."
+        })
 
     actionable_new_tasks = []
     message_ids_to_mark_read = []
@@ -815,3 +850,36 @@ def get_reference_tokens():
             tokens = clean_email_text(combined)
             all_tokens.append(tokens)
     return all_tokens
+
+def get_calendar_weeks(user, year, month):
+    # Fetch all tasks for this month for this user
+    from datetime import date
+    tasks = ExtractedTask.objects.filter(
+        user=user,
+        deadline__year=year,
+        deadline__month=month
+    )
+    # Count tasks per day
+    task_counts = {}
+    for t in tasks:
+        d = t.deadline.date()
+        task_counts[d] = task_counts.get(d, 0) + 1
+
+    # Decide fullness per day
+    FULL_THRESHOLD = 8
+    cal = calendar.Calendar(firstweekday=6)
+    weeks = []
+    for week in cal.monthdatescalendar(year, month):
+        week_list = []
+        for day in week:
+            count = task_counts.get(day, 0)
+            week_list.append({
+                'day': day.day if day.month == month else '',
+                'date': day,
+                'task_count': count,
+                'is_full': count >= FULL_THRESHOLD,
+                'is_busy': count >= FULL_THRESHOLD // 2 and count < FULL_THRESHOLD,
+                'is_free': 0 < count < FULL_THRESHOLD // 2,
+            })
+        weeks.append(week_list)
+    return weeks

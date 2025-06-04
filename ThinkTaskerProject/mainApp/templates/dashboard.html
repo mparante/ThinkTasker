@@ -19,6 +19,9 @@
             <button id="btnList" class="btn btn-toggle toggle-btn" onclick="showList()" title="List View">
                 <i class="bi bi-list-task" style="font-size: 1.2em;"></i>
             </button>
+            <button id="btnCalendar" class="btn btn-toggle toggle-btn" onclick="showCalendar()" title="Calendar View">
+                <i class="bi bi-calendar3" style="font-size: 1.2em;"></i>
+            </button>
         </div>
         <div>
             <div class="dropdown">
@@ -182,7 +185,6 @@
 
             </div>
         </div>
-
         <!-- Task List View -->
         <div id="taskList" style="display: none;">
             <div class="d-flex justify-content-end align-items-center mb-3">
@@ -219,8 +221,9 @@
                             <th></th>
                         </tr>
                     </thead>
+                    <!-- Open and Ongoing Task List -->
                     <tbody>
-                        {% for task in all_tasks %}
+                        {% for task in active_tasks %}
                         <tr>
                             <td>{{ task.subject }}</td>
                             <td>{{ task.task_description }}</td>
@@ -254,7 +257,100 @@
                         </tr>
                         {% endfor %}
                     </tbody>
+                    <!-- Completed Tasks (Collapsible Section) -->
+                    <tbody>
+                        <tr>
+                            <td colspan="6" class="show-completed-row">
+                                <a href="#completedTasksCollapse" class="show-completed-link" data-bs-toggle="collapse" data-bs-target="#completedTasksCollapse" aria-expanded="false" aria-controls="completedTasksCollapse">Show Completed Tasks ({{ completed_tasks|length }})</a>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tbody id="completedTasksCollapse" class="collapse">
+                        {% for task in completed_tasks %}
+                            <tr class="text-muted completed-task">
+                            <td>{{ task.subject }}</td>
+                            <td>{{ task.task_description }}</td>
+                            <td style="text-align: center;">{{ task.priority }}</td>
+                            <td style="text-align: center;">{{ task.status }}</td>
+                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                            <td colspan="6" class="text-center text-muted">No completed tasks.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- Calendar View -->
+        <div class="table-responsive" id="calendarView" style="display: none;">
+            <div class="calendar-container">
+                <div class="card calendar-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex align-items-center calendar-header-gap">
+                            <h3 class="mb-0">
+                                <span class="calendar-month-label">
+                                    {{ month_name }} {{ year }}
+                                </span>
+                            </h3>
+                        </div>
+                    </div>
+                    <table class="table table-bordered text-center align-middle mb-0 calendar-table">
+                        <colgroup>
+                            <col class="calendar-col-sml">
+                            <col class="calendar-col">
+                            <col class="calendar-col">
+                            <col class="calendar-col">
+                            <col class="calendar-col">
+                            <col class="calendar-col">
+                            <col class="calendar-col-sml">
+                        </colgroup>
+                        <thead class="table-light">
+                            <tr>
+                                <th class="fw-semibold py-3">Sun</th>
+                                <th class="fw-semibold py-3">Mon</th>
+                                <th class="fw-semibold py-3">Tue</th>
+                                <th class="fw-semibold py-3">Wed</th>
+                                <th class="fw-semibold py-3">Thu</th>
+                                <th class="fw-semibold py-3">Fri</th>
+                                <th class="fw-semibold py-3">Sat</th>
+                            </tr>
+                        </thead>
+                        <tbody class="align-middle">
+                            {% for week in calendar_weeks %}
+                            <tr>
+                                {% for day in week %}
+                                <td class="calendar-td {% if day.task_count > 0 %}calendar-td-clickable{% endif %}" 
+                                    {% if day.task_count > 0 %}
+                                    onclick="showDayTasks('{{ day.date|date:'Y-m-d' }}', '{{ day.day }}')"
+                                    {% endif %}>
+                                    <div class="calendar-day" > 
+                                        <!-- {% if day.is_full %} calendar-day-ring-full
+                                        {% elif day.is_busy %} calendar-day-ring-busy
+                                        {% elif day.is_free %} calendar-day-dot-free
+                                        {% endif %}"> -->
+                                        <span class="calendar-day-number">
+                                        {{ day.day }}
+                                        </span>
+                                        {% if day.task_count > 0 %}
+                                        <span class="calendar-task-badge">{{ day.task_count }}</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if not has_tasks %}
+                    <div class="text-center text-muted mt-4">
+                        <i class="bi bi-calendar-x calendar-no-task-icon"></i><br>
+                        No tasks scheduled for this month
+                    </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </main>
@@ -335,6 +431,21 @@
         </div>
     </div>
 
+    <!-- Day Tasks Modal -->
+    <div class="modal fade" id="dayTasksModal" tabindex="-1" aria-labelledby="dayTasksModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4">
+        <div class="modal-header">
+            <h5 class="modal-title" id="dayTasksModalLabel">Tasks for <span id="modalTaskDate"></span></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="modalTaskList">
+            <!-- Tasks will be loaded here -->
+        </div>
+        </div>
+    </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1055">
     <div id="taskToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
@@ -401,19 +512,31 @@
             modal.show();
         }
 
+        function hideAllViews() {
+            document.getElementById("kanbanBoard").style.display = "none";
+            document.getElementById("taskList").style.display = "none";
+            document.getElementById("calendarView").style.display = "none";
+            document.getElementById("btnBoard").classList.remove("active");
+            document.getElementById("btnList").classList.remove("active");
+            document.getElementById("btnCalendar").classList.remove("active");
+        }
 
         function showBoard() {
+            hideAllViews();
             document.getElementById("kanbanBoard").style.display = "block";
-            document.getElementById("taskList").style.display = "none";
             document.getElementById("btnBoard").classList.add("active");
-            document.getElementById("btnList").classList.remove("active");
         }
 
         function showList() {
-            document.getElementById("kanbanBoard").style.display = "none";
+            hideAllViews();
             document.getElementById("taskList").style.display = "block";
             document.getElementById("btnList").classList.add("active");
-            document.getElementById("btnBoard").classList.remove("active");
+        }
+
+        function showCalendar() {
+            hideAllViews();
+            document.getElementById("calendarView").style.display = "block";
+            document.getElementById("btnCalendar").classList.add("active");
         }
 
         function syncEmails(showSpinner = true) {
@@ -432,16 +555,47 @@
                 
                 if (data.new_tasks && data.new_tasks > 0) {
                     showToast(`${data.new_tasks} new actionable task${data.new_tasks > 1 ? "s" : ""} added!`);
+                    location.reload();
                 }
-                location.reload(); // Reload to reflect new tasks
+            })
+            .catch(err => {
+                document.getElementById("last-sync-text_kanban").textContent = "Sync failed";
+                document.getElementById("last-sync-text_list").textContent = "Sync failed";
+                showToast("Sync failed. Please login again.");
             });
+        }
+
+        function showDayTasks(dateStr, day) {
+            fetch(`/tasks/by-date/?date=${dateStr}`)
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('modalTaskDate').textContent = dateStr;
+                    let html = '';
+                    if (data.tasks.length > 0) {
+                        html = '<ul class="list-group list-group-flush">';
+                        data.tasks.forEach(t => {
+                            html += `
+                                <li class="list-group-item d-flex justify-content-between align-items-start border-0 px-0 py-2">
+                                    <div>
+                                        <div class="fw-semibold">${t.subject}</div>
+                                        <span class="badge rounded-pill bg-secondary me-1">${t.priority}</span>
+                                    </div>
+                                </li>`;
+                        });
+                        html += '</ul>';
+                    } else {
+                        html = '<div class="text-center text-muted">No tasks for this day.</div>';
+                    }
+                    document.getElementById('modalTaskList').innerHTML = html;
+                    var modal = new bootstrap.Modal(document.getElementById('dayTasksModal'));
+                    modal.show();
+                });
         }
 
         // On login (DOM loaded), sync once immediately
         document.addEventListener('DOMContentLoaded', function() {
             syncEmails();
             setInterval(syncEmails, 5 * 60 * 1000);
-            location.reload(); // Reload to reflect new tasks
         });
 
     </script>

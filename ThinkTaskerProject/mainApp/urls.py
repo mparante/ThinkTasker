@@ -12,7 +12,7 @@ urlpatterns = [
     path("profile/", views.profile, name="profile"),
 
     # Outlook and sync
-    path("outlook/", views.outlook_inbox, name="outlook-inbox"),
+    path('tasks/by-date/', views.tasks_by_date, name='tasks_by_date'),
     path("emails/sync/", views.sync_emails_view, name="sync-emails"),
 
     # === AJAX/POST/utility endpoints for dashboard use ===
