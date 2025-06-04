@@ -1,0 +1,450 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>ThinkTasker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{% static 'css/dashboard.css' %}" rel="stylesheet">
+</head>
+<body>
+    <!-- HEADER with Toggle + Profile Dropdown -->
+    <header class="d-flex justify-content-between align-items-center px-4 py-3 bg-white shadow-sm">
+        <div class="btn-group" role="group" aria-label="View toggle">
+            <button id="btnBoard" class="btn btn-toggle toggle-btn active" onclick="showBoard()" title="Board View">
+                <i class="bi bi-kanban" style="font-size: 1.2em;"></i>
+            </button>
+            <button id="btnList" class="btn btn-toggle toggle-btn" onclick="showList()" title="List View">
+                <i class="bi bi-list-task" style="font-size: 1.2em;"></i>
+            </button>
+        </div>
+        <div>
+            <div class="dropdown">
+                <a href="#" 
+                    class="d-flex align-items-center text-dark text-decoration-none dropdown-toggle"
+                    id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-person-circle fs-4 me-2"></i>
+                    <span class="fw-medium">{{ given_name|default:"User" }}</span>
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                    <li>
+                    <form action="{% url 'logout' %}" method="post" class="mb-0">
+                        {% csrf_token %}
+                        <button type="submit" class="dropdown-item w-100 text-start">Sign out</button>
+                    </form>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mt-4">
+        <!-- Kanban Board View -->
+        <div id="kanbanBoard">
+            <!-- Sync Status Bar -->
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <div id="sync-status-bar" class="d-flex align-items-center">
+                    <span class="fst-italic text-muted" id="last-sync-text_kanban">
+                        Last Sync: {{ last_synced|date:"M d, Y H:i" }}
+                    </span>
+                    <button class="btn btn-sm btn-outline-primary ms-3" id="manual-sync-btn" onclick="syncEmails()">
+                        Sync Now
+                    </button>
+                </div>
+            </div>
+            <!-- <form method="get" class="mb-3 d-flex" style="max-width: 100%;"> -->
+            <input type="text" id="searchBoardInput" class="form-control me-2" placeholder="Search tasks...">
+            <!-- <button type="submit" class="btn btn-primary">Search</button> -->
+            <!-- </form> -->
+            <div class="kanban-board">
+                
+                <!-- To-Do Column -->
+                <div class="kanban-column column" id="to-do" ondragover="allowDrop(event)" ondrop="drop(event, 'to-do')">
+                    <h3>To-Do</h3>
+                    {% for task in todo_tasks %}
+                        <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <span class="badge priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                                <div class="dropdown">
+                                    <button class="btn btn-link p-0 m-0 text-dark" type="button" id="taskMenu{{ task.id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-three-dots-vertical fs-5"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskMenu{{ task.id }}">
+                                        <li><a class="dropdown-item" href="#" 
+                                            onclick="openTaskModal(
+                                            '{{ task.id }}',
+                                            '{{ task.subject|escapejs }}',
+                                            '{{ task.task_description|escapejs }}',
+                                            '{{ task.priority|escapejs }}',
+                                            '{{ task.status|escapejs }}',
+                                            '{{ task.deadline|date:'Y-m-d\\TH:i' }}'
+                                            ); return false;">
+                                            <i class="bi bi-pencil me-2"></i>Edit
+                                        </a></li>
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="confirmDelete({{ task.id }}, '{{ task.subject|escapejs }}'); return false;"><i class="bi bi-trash me-2"></i>Delete
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <h5>
+                                {% if task.email %}
+                                    <a href="{{ task.email.web_link }}" target="_blank" class="fw-bold task-link">
+                                        {{ task.subject|default:task.email.subject }}
+                                    </a>
+                                {% else %}
+                                    {{ task.subject|default:"Untitled Task" }}
+                                {% endif %}
+                            </h5>
+                            <div>
+                                <strong>Deadline:</strong>
+                                {{ task.deadline|date:"M d, H:i" }}
+                            </div>
+                            <div class="mb-2">{{ task.task_description }}</div>
+                        </div>
+                    {% empty %}
+                        <p class="no-tasks-message text-muted">No tasks</p>
+                    {% endfor %}
+                </div>
+
+                <!-- Ongoing Column -->
+                <div class="kanban-column column" id="ongoing" ondragover="allowDrop(event)" ondrop="drop(event, 'ongoing')">
+                    <h3>Ongoing</h3>
+                    {% for task in ongoing_tasks %}
+                        <div class="task-card" id="task-{{ task.id }}" draggable="true" ondragstart="drag(event)" ondragend="dragEnd(event)">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <span class="badge priority-badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                                <div class="dropdown">
+                                    <button class="btn btn-link p-0 m-0 text-dark" type="button" id="taskMenu{{ task.id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-three-dots-vertical fs-5"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskMenu{{ task.id }}">
+                                        <li><a class="dropdown-item" href="#" 
+                                            onclick="openTaskModal(
+                                            '{{ task.id }}',
+                                            '{{ task.subject|escapejs }}',
+                                            '{{ task.task_description|escapejs }}',
+                                            '{{ task.priority|escapejs }}',
+                                            '{{ task.status|escapejs }}',
+                                            '{{ task.deadline|date:'Y-m-d\\TH:i' }}'
+                                            ); return false;">
+                                            <i class="bi bi-pencil me-2"></i>Edit
+                                        </a></li>
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="confirmDelete({{ task.id }}, '{{ task.subject|escapejs }}'); return false;"><i class="bi bi-trash me-2"></i>Delete
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <h5>
+                                {% if task.email %}
+                                    <a href="{{ task.email.web_link }}" target="_blank" class="fw-bold task-link">
+                                        {{ task.subject|default:task.email.subject }}
+                                    </a>
+                                {% else %}
+                                    {{ task.subject|default:"Untitled Task" }}
+                                {% endif %}
+                            </h5>
+                            <div>
+                                <strong>Deadline:</strong>
+                                {{ task.deadline|date:"M d, H:i" }}
+                            </div>
+                            <div class="mb-2">{{ task.task_description }}</div>
+                        </div>
+                    {% empty %}
+                        <p class="no-tasks-message text-muted">No tasks</p>
+                    {% endfor %}
+                </div>
+                
+                <!-- Completed Column -->
+                <div class="kanban-column column" id="completed" ondragover="allowDrop(event)" ondrop="drop(event, 'completed')">
+                    <h3>Completed</h3>
+                    {% for task in completed_tasks %}
+                        <div class="task-card completed" id="task-{{ task.id }}" draggable="false">
+                            <h5 class="text-decoration-line-through text-muted">
+                                {% if task.email %}
+                                    <a href="{{ task.email.web_link }}" target="_blank" class="text-muted text-decoration-none">
+                                        {{ task.subject|default:task.email.subject }}
+                                    </a>
+                                {% else %}
+                                    {{ task.subject|default:"Untitled Task" }}
+                                {% endif %}
+                            </h5>
+                            <small class="text-muted">
+                                Completed at:
+                                {{ task.updated_at|default:task.created_at|date:"M d, H:i" }}
+                            </small>
+                        </div>
+                    {% empty %}
+                        <p class="no-tasks-message text-muted">No tasks</p>
+                    {% endfor %}
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Task List View -->
+        <div id="taskList" style="display: none;">
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <div id="sync-status-bar" class="d-flex align-items-center">
+                    <span class="fst-italic text-muted" id="last-sync-text_list">
+                        Last Sync: {{ last_synced|date:"M d, Y H:i" }}
+                    </span>
+                    <button class="btn btn-sm btn-outline-primary ms-3" id="manual-sync-btn" onclick="syncEmails()">
+                        Sync Now
+                    </button>
+                </div>
+            </div>
+            <!-- <form method="get" class="mb-3 d-flex" style="max-width: 100%;"> -->
+            <input type="text" id="searchListInput" class="form-control me-2" placeholder="Search tasks...">
+            <!-- <button type="submit" class="btn btn-primary">Search</button> -->
+            <!-- </form> -->
+            <div class="task-table table-responsive">
+                <table class="table align-middle" id="taskTable">
+                    <colgroup>
+                        <col style="width: 20%;">
+                        <col style="width: 45%;">
+                        <col style="width: 10%;">
+                        <col style="width: 10%;">
+                        <col style="width: 10%;">
+                        <col style="width: 5%;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th style="text-align: center;">Priority</th>
+                            <th style="text-align: center;">Status</th>
+                            <th style="text-align: center;">Deadline</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in all_tasks %}
+                        <tr>
+                            <td>{{ task.subject }}</td>
+                            <td>{{ task.task_description }}</td>
+                            <td style="text-align: center;">{{ task.priority }}</td>
+                            <td style="text-align: center;">{{ task.status }}</td>
+                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
+                            <td style="text-align: right;">
+                                <div class="dropdown">
+                                    <button class="btn btn-link p-0 m-0 text-dark" type="button"
+                                            id="taskListMenu{{ task.id }}" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-three-dots-vertical fs-5"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskListMenu{{ task.id }}">
+                                    <li>
+                                        <a class="dropdown-item" href="#" onclick="openTaskModal('{{ task.id }}', '{{ task.subject|escapejs }}', '{{ task.task_description|escapejs }}', '{{ task.priority|escapejs }}', '{{ task.status|escapejs }}', '{{ task.deadline|date:'Y-m-d\\TH:i' }}'); return false;">
+                                        <i class="bi bi-pencil me-2"></i>Edit
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="#" onclick="confirmDelete({{ task.id }}, '{{ task.subject|escapejs }}'); return false;">
+                                        <i class="bi bi-trash me-2"></i>Delete
+                                        </a>
+                                    </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No tasks found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- FAB to open “Add Task” modal -->
+    <button class="fab-add-task" title="Add Task" onclick="openTaskModal()">+</button>
+    
+    <!-- Task Add/Edit Modal -->
+    <div class="modal fade" id="taskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+            <form id="taskForm" method="post" action="{% url 'create_task' %}">
+                {% csrf_token %}
+                <input type="hidden" name="task_id" id="modalTaskId">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="taskModalTitle">Add Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="modalSubject" class="form-label">Title</label>
+                        <input type="text" name="subject" class="form-control" id="modalSubject" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalDescription" class="form-label">Description</label>
+                        <textarea name="task_description" class="form-control" id="modalDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalPriority" class="form-label">Priority</label>
+                        <select name="priority" class="form-select" id="modalPriority">
+                            <option value="Urgent">Urgent</option>
+                            <option value="Important">Important</option>
+                            <option value="Medium">Medium</option>
+                            <option value="Low">Low</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalStatus" class="form-label">Status</label>
+                        <select name="status" class="form-select" id="modalStatus">
+                            <option value="Open">Open</option>
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modalDeadline" class="form-label">Deadline</label>
+                        <input type="datetime-local" name="deadline" class="form-control" id="modalDeadline">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Save Task</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+            <form id="deleteForm" method="post" action="">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete <strong id="deleteTaskSubject"></strong>?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1055">
+    <div id="taskToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+        <div class="toast-body" id="taskToastBody">
+            <!-- Toast message will appear here. -->
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+    </div>
+
+    <!-- Bootstrap 5 JS Bundle (Popper + JS) -->
+    <script src="{% static 'js/dragdrop.js' %}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        function showToast(message) {
+            const toastBody = document.getElementById("taskToastBody");
+            toastBody.textContent = message;
+            const toast = new bootstrap.Toast(document.getElementById("taskToast"));
+            toast.show();
+        }
+
+        function openTaskModal(id, subject, description, priority, status, deadline) {
+            document.getElementById("taskModalTitle").innerText = id ? "Edit Task" : "Add Task";
+            document.getElementById("modalTaskId").value = id || "";
+            document.getElementById("modalSubject").value = subject || "";
+            document.getElementById("modalDescription").value = description || "";
+            document.getElementById("modalPriority").value = priority || "Medium";
+            document.getElementById("modalStatus").value = status || "Open";
+            document.getElementById("taskForm").action = id ? `/tasks/edit/${id}/` : "{% url 'create_task' %}";
+
+            const deadlineInput = document.getElementById("modalDeadline");
+            const priorityInput = document.getElementById("modalPriority");
+            if (!id) {
+                fetchRecommendedDeadline(priorityInput.value, deadlineInput);
+                priorityInput.onchange = function() {
+                    fetchRecommendedDeadline(this.value, deadlineInput);
+                };
+            } else {
+                deadlineInput.value = deadline || "";
+                priorityInput.onchange = null;
+            }
+            var modal = new bootstrap.Modal(document.getElementById('taskModal'));
+            modal.show();
+        }
+
+        function fetchRecommendedDeadline(priority, inputElem) {
+            fetch(`/tasks/recommended-deadline/?priority=${encodeURIComponent(priority)}`)
+            .then(res => res.json())
+            .then(data => {
+                inputElem.value = data.recommended_deadline || "";
+            })
+            .catch(() => {
+                inputElem.value = "";
+            });
+        }
+
+        function confirmDelete(id, subject) {
+            document.getElementById("deleteForm").action = `/tasks/delete/${id}/`;
+            document.getElementById("deleteTaskSubject").textContent = subject || "this task";
+            var modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+            modal.show();
+        }
+
+
+        function showBoard() {
+            document.getElementById("kanbanBoard").style.display = "block";
+            document.getElementById("taskList").style.display = "none";
+            document.getElementById("btnBoard").classList.add("active");
+            document.getElementById("btnList").classList.remove("active");
+        }
+
+        function showList() {
+            document.getElementById("kanbanBoard").style.display = "none";
+            document.getElementById("taskList").style.display = "block";
+            document.getElementById("btnList").classList.add("active");
+            document.getElementById("btnBoard").classList.remove("active");
+        }
+
+        function syncEmails(showSpinner = true) {
+            if (showSpinner) {
+                document.getElementById("last-sync-text_kanban").textContent = "Syncing…";
+                document.getElementById("last-sync-text_list").textContent = "Syncing…";
+            }
+            fetch('/emails/sync/')
+            .then(response => response.json())
+            .then(data => {
+                // Update task list/board: e.g., for each new task in data.new_tasks, add to DOM
+                document.getElementById("last-sync-text_kanban").textContent =
+                    "Last Sync: " + data.last_synced;
+                document.getElementById("last-sync-text_list").textContent =
+                    "Last Sync: " + data.last_synced;
+                
+                if (data.new_tasks && data.new_tasks > 0) {
+                    showToast(`${data.new_tasks} new actionable task${data.new_tasks > 1 ? "s" : ""} added!`);
+                }
+                location.reload(); // Reload to reflect new tasks
+            });
+        }
+
+        // On login (DOM loaded), sync once immediately
+        document.addEventListener('DOMContentLoaded', function() {
+            syncEmails();
+            setInterval(syncEmails, 5 * 60 * 1000);
+            location.reload(); // Reload to reflect new tasks
+        });
+
+    </script>
+
+</body>
+</html>

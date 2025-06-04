@@ -1,0 +1,152 @@
+body { 
+    background: #f3f4f6; 
+    font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.kanban-board { 
+    display: flex; 
+    gap: 2rem; 
+    margin-top: 2rem; 
+}
+
+.kanban-column {
+    background: #fff; 
+    border-radius: 1rem; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 1.2rem; 
+    width: 100%; 
+    min-height: 60vh;
+}
+        
+.kanban-column h3 {
+    margin-bottom: 1.2rem;
+    text-align: center;
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 1.65rem;
+}
+
+.task-card {
+    background: #f8f9fa; 
+    border-radius: 0.8rem; 
+    margin-bottom: 1.2rem; 
+    padding: 1rem 1.2rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05); 
+    transition: box-shadow 0.1s; 
+    cursor: grab;
+}
+
+.task-card:active { 
+    cursor: grabbing; 
+    box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+}
+
+.priority-badge {
+    font-size: 0.90em;
+    padding: 0.4em 0.8em;
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.priority-urgent {
+    background: #ff5252;    /* Vivid Red */
+    color: #fff;
+}
+
+.priority-important {
+    background: #ff9800;    /* Orange */
+    color: #fff;
+}
+
+.priority-medium {
+    background: #4caf50;    /* Green */
+    color: #fff;
+}
+
+.priority-low {
+    background: #ffd600;    /* Yellow */
+    color: #222;
+    border: 1px solid #ffecb3;
+}
+
+.btn-toggle.active, .btn-toggle:focus { 
+    background: #0d6efd; 
+    color: #fff;
+}
+
+.toggle-btn { 
+    min-width: 80px; 
+}
+
+.task-table { 
+    background: #fff; 
+    border-radius: 1rem; 
+    padding: 1.5rem; 
+    margin-top: 2rem; 
+}
+
+.fab-add-task {
+    position: fixed; 
+    right: 2.3vw; 
+    bottom: 3.5vw;
+    width: 60px; 
+    height: 60px; 
+    border-radius: 50%; 
+    font-size: 2.3rem; 
+    color: #fff;
+    background: #15b374; 
+    border: none;
+    box-shadow: 0 2px 12px rgba(21,179,116,0.12), 0 4px 24px rgba(0,0,0,0.09);
+    z-index: 100; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    cursor: pointer; 
+    transition: background 0.14s, box-shadow 0.14s;
+}
+
+.fab-add-task:hover, .fab-add-task:focus {
+    background: #199e65;
+    box-shadow: 0 4px 24px rgba(21,179,116,0.15);
+}
+
+.kanban-column.drag-over {
+    background: #e3f2fd;
+    box-shadow: 0 0 0 2px #1976d2;
+}
+
+.task-link {
+  color: #212529;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.task-link:hover,
+.task-link:focus {
+  text-decoration: underline;
+}
+
+.btn.btn-light.btn-sm {
+    background: none;
+    border: none;
+    box-shadow: none;
+}
+
+.dropdown-menu {
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(3px);
+    border-radius: 12px;
+    box-shadow: 0 6px 24px 0 rgba(0,0,0,0.10);
+    border: none;
+}
+
+.dropdown-item {
+    border-radius: 8px;
+    margin: 0 4px;
+    transition: background 0.12s;
+}
+
+.dropdown-item:active, .dropdown-item:focus, .dropdown-item:hover {
+    background: #f2f3f5;
+}

@@ -120,3 +120,26 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
+
+document.getElementById('searchListInput').addEventListener('input', function() {
+    let filter = this.value.toLowerCase();
+    let rows = document.querySelectorAll('#taskTable tbody tr');
+    rows.forEach(row => {
+        let title = row.cells[0]?.textContent.toLowerCase() || '';
+        let description = row.cells[1]?.textContent.toLowerCase() || '';
+        if (title.includes(filter) || description.includes(filter)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+
+document.getElementById('searchBoardInput').addEventListener('input', function () {
+    let filter = this.value.toLowerCase();
+    document.querySelectorAll('.kanban-column .task-card').forEach(card => {
+        // Searches title, description, and priority text inside each card
+        let text = card.textContent.toLowerCase();
+        card.style.display = text.includes(filter) ? '' : 'none';
+    });
+});

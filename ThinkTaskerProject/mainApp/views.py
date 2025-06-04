@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from django.db.models import Q, Case, When, Value, IntegerField
 
 from .models import ActionablePattern, ExtractedTask, ProcessedEmail, ThinkTaskerUser, ReferenceDocument
@@ -41,6 +41,14 @@ priority_order = Case(
     When(priority='Medium', then=Value(3)),
     When(priority='Low', then=Value(4)),
     default=Value(5),
+    output_field=IntegerField()
+)
+
+status_order = Case(
+    When(status='Open', then=Value(1)),
+    When(status='Ongoing', then=Value(2)),
+    When(status='Completed', then=Value(3)),
+    default=Value(4),
     output_field=IntegerField()
 )
 
@@ -165,25 +173,25 @@ def parse_iso_datetime(dt_str):
 
 @login_required
 def index(request):
-    actionable_tasks = (
-        ExtractedTask.objects
-        .filter(user=request.user)
-        .filter(Q(email__is_actionable=True) | Q(email__isnull=True))
-        .annotate(priority_rank=priority_order)
-        .order_by('priority_rank', 'deadline', '-created_at')
-        .distinct()
-    )
-    
-    todo_tasks = actionable_tasks.filter(status="Open")
-    ongoing_tasks = actionable_tasks.filter(status="Ongoing")
-    completed_tasks = actionable_tasks.filter(status="Completed")
-    context = {
+    query = request.GET.get("q", "")
+    base_qs = ExtractedTask.objects.filter(user=request.user).annotate(priority_rank=priority_order, status_rank=status_order)
+
+    all_tasks = base_qs
+    if query:
+        all_tasks = all_tasks.filter(Q(subject__icontains=query) | Q(task_description__icontains=query))
+    all_tasks = all_tasks.order_by('priority_rank', 'status_rank', 'deadline')
+
+    todo_tasks = base_qs.filter(status="Open").order_by('priority_rank', 'deadline')
+    ongoing_tasks = base_qs.filter(status="Ongoing").order_by('priority_rank', 'deadline')
+    completed_tasks = base_qs.filter(status="Completed").order_by('priority_rank', 'deadline')
+
+    return render(request, "dashboard.html", {
         "todo_tasks": todo_tasks,
         "ongoing_tasks": ongoing_tasks,
         "completed_tasks": completed_tasks,
-    }
-    
-    return render(request, "index.html", context)
+        "all_tasks": all_tasks,
+        "query": query,
+    })
 
 @login_required
 def outlook_inbox(request):
@@ -213,11 +221,23 @@ def extract_actionable_items(text):
 def sync_emails_view(request):
     user = request.user
     access_token = _get_graph_token(request)
+    now = timezone.localtime(timezone.now())
+    today = now.date()
+
+    # Update overdue tasks to next available hour if date is less than today
+    overdue_tasks = ExtractedTask.objects.filter(
+        user=user,
+        status__in=["Open", "Ongoing"],
+        deadline__date__lt=today
+    ).order_by('deadline')
+
+    if overdue_tasks:
+        assign_deadline_and_priority_batch(user, overdue_tasks, now=now)
 
     last_sync = user.last_synced_datetime
     all_emails = []
     if last_sync:
-        received_after = last_sync.strftime('%Y-%m-%dT%H:%M:%SZ')
+        received_after = last_sync.strftime("%Y-%m-%d %H:%M")
         url = (
             f"https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages"
             f"?$filter=receivedDateTime ge {received_after}"
@@ -314,8 +334,9 @@ def sync_emails_view(request):
             message_ids_to_mark_read.append(message_id)
 
     assign_deadline_and_priority_batch(user, actionable_new_tasks)
-
+    task_objs = []
     for task in actionable_new_tasks:
+
         pe = ProcessedEmail.objects.create(
             user=user,
             message_id=task["message_id"],
@@ -329,7 +350,7 @@ def sync_emails_view(request):
         todo_task_id, todo_list_id = todo.create_todo_task(
             access_token, task["subject"], task["preview"][:500], task["assigned_deadline"]
         )
-        ExtractedTask.objects.create(
+        et = ExtractedTask.objects.create(
             user=user,
             email=pe,
             subject=task["subject"],
@@ -341,16 +362,29 @@ def sync_emails_view(request):
             todo_task_id=todo_task_id,
             todo_list_id=todo_list_id,
         )
+        task_objs.append({
+            "id": et.id,
+            "subject": et.subject,
+            "task_description": et.task_description,
+            "priority": et.priority,
+            "deadline": et.deadline,
+            "status": et.status,
+        })
 
     # Batch mark all processed emails as read
     if message_ids_to_mark_read:
         read_email.batch_mark_emails_as_read(message_ids_to_mark_read, access_token)
 
+    # Update last synced date
+    now_str = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
     user.last_synced_datetime = timezone.now()
     user.save(update_fields=['last_synced_datetime'])
-    messages.success(request, "Sync completed! All unread actionable emails were processed and prioritized.")
-    return redirect("outlook-inbox")
-
+    # Return JSON for AJAX update
+    return JsonResponse({
+        "success": True,
+        "new_tasks": task_objs,
+        "last_synced": now_str,
+    })
 
 @csrf_exempt
 @login_required
@@ -387,17 +421,17 @@ def update_task_status(request):
             return JsonResponse({"success": False, "error": "Task not found"})
     return JsonResponse({"success": False, "error": "Invalid request"})
 
-@login_required
-def task_list(request):
-    query = request.GET.get("q", "")
-    tasks = ExtractedTask.objects.filter(user=request.user)
-    if query:
-        tasks = tasks.filter(
-            Q(subject__icontains=query) |
-            Q(task_description__icontains=query)
-        )
-    tasks = tasks.annotate(priority_rank=priority_order).order_by('priority_rank', 'deadline', '-created_at')
-    return render(request, "task_list.html", {"tasks": tasks, "query": query})
+# @login_required
+# def task_list(request):
+#     query = request.GET.get("q", "")
+#     tasks = ExtractedTask.objects.filter(user=request.user)
+#     if query:
+#         tasks = tasks.filter(
+#             Q(subject__icontains=query) |
+#             Q(task_description__icontains=query)
+#         )
+#     tasks = tasks.annotate(priority_rank=priority_order).order_by('priority_rank', 'deadline', '-created_at')
+#     return render(request, "task_list.html", {"tasks": tasks, "query": query})
 
 @login_required
 def create_task(request):
@@ -426,10 +460,9 @@ def create_task(request):
             task.todo_task_id = todo_task_id
             task.todo_list_id = todo_list_id
             task.save()
-            return redirect("task_list")
+            return redirect("dashboard")
     else:
-        form = ExtractedTaskForm()
-    return render(request, "task_form.html", {"form": form})
+        return redirect("dashboard")
 
 @login_required
 def edit_task(request, task_id):
@@ -458,10 +491,9 @@ def edit_task(request, task_id):
             except Exception as e:
                 logger.warning(f"Failed to sync To Do update for task {updated_task.todo_task_id}: {e}")
             updated_task.save()
-            return redirect("task_list")
+            return redirect("dashboard")
     else:
-        form = ExtractedTaskForm(instance=task)
-    return render(request, "task_form.html", {"form": form, "task": task})
+        return redirect("dashboard")
 
 @login_required
 @require_POST
@@ -472,7 +504,7 @@ def delete_task(request, task_id):
     if task.todo_task_id:
         todo.delete_todo_task(access_token, task.todo_list_id, task.todo_task_id)
     task.delete()
-    return redirect("task_list")
+    return redirect("dashboard")
 
 @login_required
 def settings_view(request):
@@ -683,7 +715,7 @@ def recommended_deadline(request):
     priority = request.GET.get("priority", "Medium")
     urgent = (priority == "Urgent")
     recommended_dt = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
-    recommended_str = recommended_dt.strftime("%Y-%m-%dT%H:%M")
+    recommended_str = recommended_dt.strftime("%Y-%m-%d %H:%M")
     return JsonResponse({"recommended_deadline": recommended_str})
 
 def get_priority_rank(priority):

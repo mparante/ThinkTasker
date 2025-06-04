@@ -27,9 +27,12 @@ body {
 }
 
 .app-content {
+  /* margin-top: 60px; */
+  /* margin-left: 200px; */
+  /* width: calc(100% - 200px); */
   margin-top: 60px;
-  margin-left: 200px;
-  width: calc(100% - 200px);
+  margin-left: 60px;
+  margin-right: 60px;
   padding: 2rem;
   box-sizing: border-box;
   overflow-y: auto;
