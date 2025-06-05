@@ -737,15 +737,6 @@ def create_task(request):
             task = form.save(commit=False)
             task.user = request.user
             task.is_actionable = True
-            
-            # Use user-set deadline if provided, else auto-assign
-            deadline_str = request.POST.get("deadline")
-            if deadline_str:
-                task.deadline = timezone.make_aware(datetime.strptime(deadline_str, "%Y-%m-%d"))
-            else:
-                task.deadline = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
-
-            # To Do task creation
             access_token = _get_graph_token(request)
             
             todo_task_id, todo_list_id = todo.create_todo_task(
