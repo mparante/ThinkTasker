@@ -1,3 +1,6 @@
+#This file contains the models for the ThinkTasker application.
+# It defines the database schema for user accounts, actionable patterns, processed emails, extracted tasks, and reference documents.
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings

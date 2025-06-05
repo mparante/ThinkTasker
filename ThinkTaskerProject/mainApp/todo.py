@@ -1,3 +1,4 @@
+# This script is for Microsoft To Do task integration using Microsoft Graph API.
 import requests
 
 def get_todo_list_id(access_token):

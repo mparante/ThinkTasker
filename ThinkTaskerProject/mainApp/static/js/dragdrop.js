@@ -1,3 +1,39 @@
+const PRIORITY_ORDER = {
+    "Urgent": 1,
+    "Important": 2,
+    "Medium": 3,
+    "Low": 4
+};
+
+function sortCardsByPriority(column) {
+    const cards = Array.from(column.querySelectorAll('.task-card:not(.completed)'));
+    cards.sort((a, b) => {
+        const aPriority = (a.querySelector('.priority-badge')?.textContent || "Medium");
+        const bPriority = (b.querySelector('.priority-badge')?.textContent || "Medium");
+        return PRIORITY_ORDER[aPriority] - PRIORITY_ORDER[bPriority];
+    });
+    cards.forEach(card => column.appendChild(card));
+}
+
+window.drop = function (event, columnId) {
+    event.preventDefault();
+    const taskId = event.dataTransfer.getData("text/plain");
+    const task = document.getElementById(taskId);
+    const column = document.getElementById(columnId);
+
+    if (task && column) {
+        const noTasksMsg = column.querySelector('.no-tasks-message');
+        if (noTasksMsg) noTasksMsg.remove();
+
+        column.appendChild(task);
+        updateTaskStatus(taskId, columnId);
+
+        sortCardsByPriority(column);
+
+        document.querySelectorAll(".column").forEach(col => ensureNoTasksMessage(col));
+    }
+};
+
 window.drag = function (event) {
     if (event.target.classList.contains('completed')) {
         event.preventDefault();
@@ -15,57 +51,7 @@ window.allowDrop = function (event) {
     event.preventDefault();
 };
 
-function updateTaskStatus(taskId, newStatus) {
-    console.log("Updating task status:", taskId, newStatus);
-    fetch("/update-task-status/", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-CSRFToken": getCSRFToken(),
-        },
-        body: `task_id=${taskId.replace('task-', '')}&new_status=${capitalizeStatus(newStatus)}`
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (!data.success) {
-            alert("Failed to update task status: " + data.error);
-        } else {
-            if (capitalizeStatus(newStatus) === "Completed") {
-                const task = document.getElementById(taskId);
-                if (task) {
-                    task.classList.add("completed");
-                    task.setAttribute("draggable", "false");
-                }
-            }
-        }
-    });
-}
-
-function getCSRFToken() {
-    let cookieValue = null,
-        name = "csrftoken";
-    if (document.cookie && document.cookie !== "") {
-        let cookies = document.cookie.split(";");
-        for (let i = 0; i < cookies.length; i++) {
-            let cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === name + "=") {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
-
-function capitalizeStatus(status) {
-    if (status === "to-do") return "Open";
-    if (status === "ongoing") return "Ongoing";
-    if (status === "completed") return "Completed";
-    return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 window.drop = function (event, columnId) {
-    // console.log("Dropping task into column:", columnId);
     event.preventDefault();
     const taskId = event.dataTransfer.getData("text/plain");
     const task = document.getElementById(taskId);
@@ -84,22 +70,6 @@ window.drop = function (event, columnId) {
         });
     }
 };
-
-function columnHasTasks(column) {
-    return column.querySelectorAll(".task-card").length > 0;
-}
-
-function ensureNoTasksMessage(column) {
-    if (!columnHasTasks(column)) {
-        // Only add if not present
-        if (!column.querySelector('.no-tasks-message')) {
-            const msg = document.createElement('p');
-            msg.className = 'no-tasks-message';
-            msg.textContent = 'No tasks';
-            column.appendChild(msg);
-        }
-    }
-}
 
 document.addEventListener("DOMContentLoaded", function () {
     const columns = document.querySelectorAll(".column");
@@ -143,3 +113,58 @@ document.getElementById('searchBoardInput').addEventListener('input', function (
         card.style.display = text.includes(filter) ? '' : 'none';
     });
 });
+
+function columnHasTasks(column) {
+    return column.querySelectorAll(".task-card").length > 0;
+}
+
+function ensureNoTasksMessage(column) {
+    if (!columnHasTasks(column)) {
+        if (!column.querySelector('.no-tasks-message')) {
+            const msg = document.createElement('p');
+            msg.className = 'no-tasks-message';
+            msg.textContent = 'No tasks';
+            column.appendChild(msg);
+        }
+    }
+}
+
+function getCSRFToken() {
+    let cookieValue = null,
+    name = "csrftoken";
+        if (document.cookie && document.cookie !== "") {
+            let cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                let cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === name + "=") {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+    return cookieValue;
+}
+
+function capitalizeStatus(status) {
+    if (status === "to-do") return "Open";
+    if (status === "ongoing") return "Ongoing";
+    if (status === "completed") return "Completed";
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatDeadline(dateString) {
+    if (!dateString) return "";
+    
+    const parts = dateString.split(" ");
+    if (parts.length !== 2) return dateString;
+    
+    const [date, time] = parts;
+    const [year, month, day] = date.split('-').map(Number);
+    const [hour, minute] = time.split(':').map(Number);
+
+    const d = new Date(year, month - 1, day, hour, minute);
+
+    const options = { month: 'short' };
+    const monthStr = d.toLocaleString('en-US', options);
+    return `${monthStr} ${day} - ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+}

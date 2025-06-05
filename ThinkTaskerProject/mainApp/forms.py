@@ -1,3 +1,5 @@
+# This script is for the modals used at add and edit tasks at dashboard.
+
 from django import forms
 from .models import ExtractedTask
 

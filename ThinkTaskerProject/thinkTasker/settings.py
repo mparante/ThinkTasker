@@ -132,7 +132,10 @@ GRAPH_REDIRECT_URI = "http://localhost:8000/graph/callback/"
 GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
 GRAPH_SCOPE = [
     "User.Read",
-    "Mail.Read",
+    "User.Read.All",
+    "User.ReadBasic.All",
+    "User.ReadWrite",
+    "Tasks.Read",
     "Tasks.ReadWrite",
 ]
 

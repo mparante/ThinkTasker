@@ -312,3 +312,27 @@ body {
 @media (max-width: 900px) {
     .calendar-day { min-width: 35px; min-height: 40px; font-size: 0.9em; }
 }
+
+.clear-completed-btn {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.clear-completed-btn .clear-text {
+    opacity: 0;
+    width: 0;
+    margin-left: 0;
+    transition: opacity 0.2s, width 0.2s, margin 0.2s;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.clear-completed-btn:hover .clear-text,
+.clear-completed-btn:focus .clear-text {
+    opacity: 1;
+    width: auto;
+    margin-left: 0.5em;
+}

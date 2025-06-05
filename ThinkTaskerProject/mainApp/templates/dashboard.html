@@ -5,9 +5,11 @@
     <meta charset="UTF-8" />
     <title>ThinkTasker</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="ThinkTasker - Turn your emails into actionable tasks.">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.6/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="{% static 'css/dashboard.css' %}" rel="stylesheet">
+    <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 </head>
 <body>
     <!-- HEADER with Toggle + Profile Dropdown -->
@@ -57,10 +59,7 @@
                     </button>
                 </div>
             </div>
-            <!-- <form method="get" class="mb-3 d-flex" style="max-width: 100%;"> -->
             <input type="text" id="searchBoardInput" class="form-control me-2" placeholder="Search tasks...">
-            <!-- <button type="submit" class="btn btn-primary">Search</button> -->
-            <!-- </form> -->
             <div class="kanban-board">
                 
                 <!-- To-Do Column -->
@@ -105,9 +104,7 @@
                                 {{ task.deadline|date:"M d, H:i" }}
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
-                        </div>
-                    {% empty %}
-                        <p class="no-tasks-message text-muted">No tasks</p>
+                        </div>                    
                     {% endfor %}
                 </div>
 
@@ -154,14 +151,15 @@
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
                         </div>
-                    {% empty %}
-                        <p class="no-tasks-message text-muted">No tasks</p>
                     {% endfor %}
                 </div>
                 
                 <!-- Completed Column -->
                 <div class="kanban-column column" id="completed" ondragover="allowDrop(event)" ondrop="drop(event, 'completed')">
-                    <h3>Completed</h3>
+                    <h3 class="mx-auto mb-0" style="flex:1; text-align:center;">Completed</h3>
+                        <button class="btn btn-sm btn-danger clear-completed-btn ms-auto" onclick="clearCompletedTasks()" title="Clear All Completed">
+                                <i class="bi bi-trash"></i><span class="clear-text">Clear</span>
+                        </button>
                     {% for task in completed_tasks %}
                         <div class="task-card completed" id="task-{{ task.id }}" draggable="false">
                             <h5 class="text-decoration-line-through text-muted">
@@ -173,18 +171,13 @@
                                     {{ task.subject|default:"Untitled Task" }}
                                 {% endif %}
                             </h5>
-                            <small class="text-muted">
-                                Completed at:
-                                {{ task.updated_at|default:task.created_at|date:"M d, H:i" }}
-                            </small>
-                        </div>
-                    {% empty %}
-                        <p class="no-tasks-message text-muted">No tasks</p>
+                            <div class="mb-2 text-decoration-line-through text-muted mb-1">${task.description || ""}</div>
+                        </div>                        
                     {% endfor %}
                 </div>
-
             </div>
         </div>
+
         <!-- Task List View -->
         <div id="taskList" style="display: none;">
             <div class="d-flex justify-content-end align-items-center mb-3">
@@ -197,10 +190,7 @@
                     </button>
                 </div>
             </div>
-            <!-- <form method="get" class="mb-3 d-flex" style="max-width: 100%;"> -->
             <input type="text" id="searchListInput" class="form-control me-2" placeholder="Search tasks...">
-            <!-- <button type="submit" class="btn btn-primary">Search</button> -->
-            <!-- </form> -->
             <div class="task-table table-responsive">
                 <table class="table align-middle" id="taskTable">
                     <colgroup>
@@ -251,10 +241,6 @@
                                 </div>
                             </td>
                         </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="6" class="text-center">No tasks found.</td>
-                        </tr>
                         {% endfor %}
                     </tbody>
                     <!-- Completed Tasks (Collapsible Section) -->
@@ -273,10 +259,6 @@
                             <td style="text-align: center;">{{ task.priority }}</td>
                             <td style="text-align: center;">{{ task.status }}</td>
                             <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
-                            </tr>
-                        {% empty %}
-                            <tr>
-                            <td colspan="6" class="text-center text-muted">No completed tasks.</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -322,15 +304,12 @@
                             {% for week in calendar_weeks %}
                             <tr>
                                 {% for day in week %}
-                                <td class="calendar-td {% if day.task_count > 0 %}calendar-td-clickable{% endif %}" 
+                                <td class="calendar-td {% if day.task_count > 0 %}calendar-td-clickable{% endif %}"
+                                    data-date="{{ day.date|date:'Y-m-d' }}"
                                     {% if day.task_count > 0 %}
                                     onclick="showDayTasks('{{ day.date|date:'Y-m-d' }}', '{{ day.day }}')"
                                     {% endif %}>
-                                    <div class="calendar-day" > 
-                                        <!-- {% if day.is_full %} calendar-day-ring-full
-                                        {% elif day.is_busy %} calendar-day-ring-busy
-                                        {% elif day.is_free %} calendar-day-dot-free
-                                        {% endif %}"> -->
+                                    <div class="calendar-day" >
                                         <span class="calendar-day-number">
                                         {{ day.day }}
                                         </span>
@@ -353,6 +332,7 @@
                 </div>
             </div>
         </div>
+
     </main>
 
     <!-- FAB to open “Add Task” modal -->
@@ -436,11 +416,10 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4">
         <div class="modal-header">
-            <h5 class="modal-title" id="dayTasksModalLabel">Tasks for <span id="modalTaskDate"></span></h5>
+            <h5 class="modal-title" id="dayTasksModalLabel">Tasks</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body" id="modalTaskList">
-            <!-- Tasks will be loaded here -->
         </div>
         </div>
     </div>
@@ -451,7 +430,6 @@
     <div id="taskToast" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="d-flex">
         <div class="toast-body" id="taskToastBody">
-            <!-- Toast message will appear here. -->
         </div>
         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
         </div>
@@ -545,23 +523,36 @@
                 document.getElementById("last-sync-text_list").textContent = "Syncing…";
             }
             fetch('/emails/sync/')
-            .then(response => response.json())
+            .then(response => { 
+                // This will handle the response status codes
+                if (response.status === 401 || response.status === 403) {
+                    showToast("Session expired. Please log in again.");
+                    setTimeout(() => window.location.href = "/login/", 1500);
+                    return null;
+                }
+                return response.json();
+            })
             .then(data => {
-                // Update task list/board: e.g., for each new task in data.new_tasks, add to DOM
+                // If the response was null, it means we had an error
+                if (!data) return;
+                // Update the last synced text
                 document.getElementById("last-sync-text_kanban").textContent =
                     "Last Sync: " + data.last_synced;
                 document.getElementById("last-sync-text_list").textContent =
                     "Last Sync: " + data.last_synced;
-                
-                if (data.new_tasks && data.new_tasks > 0) {
-                    showToast(`${data.new_tasks} new actionable task${data.new_tasks > 1 ? "s" : ""} added!`);
-                    location.reload();
+                // Show a success message
+                if (data.new_tasks && data.new_tasks.length > 0) {
+                    showToast(`${data.new_tasks.length} new actionable task${data.new_tasks.length > 1 ? "s" : ""} added!`);
+                    reloadKanbanBoard();
+                    reloadListView();
+                    reloadCalendarView();
                 }
             })
             .catch(err => {
                 document.getElementById("last-sync-text_kanban").textContent = "Sync failed";
                 document.getElementById("last-sync-text_list").textContent = "Sync failed";
                 showToast("Sync failed. Please login again.");
+                setTimeout(() => window.location.href = "/login/", 1500);
             });
         }
 
@@ -569,7 +560,6 @@
             fetch(`/tasks/by-date/?date=${dateStr}`)
                 .then(res => res.json())
                 .then(data => {
-                    document.getElementById('modalTaskDate').textContent = dateStr;
                     let html = '';
                     if (data.tasks.length > 0) {
                         html = '<ul class="list-group list-group-flush">';
@@ -592,13 +582,306 @@
                 });
         }
 
+        function reloadKanbanBoard() {
+            fetch('/tasks/all/?format=json')
+                .then(res => res.json())
+                .then(data => {
+                    // Set header ONCE for each column!
+                    const todoCol = document.getElementById("to-do");
+                    const ongoingCol = document.getElementById("ongoing");
+                    const completedCol = document.getElementById("completed");
+
+                    // Only the header/title ONCE
+                    todoCol.innerHTML = "<h3>To-Do</h3>";
+                    ongoingCol.innerHTML = "<h3>Ongoing</h3>";
+                    completedCol.innerHTML = `
+                        <div class="d-flex align-items-center mb-2" style="position: relative;">
+                            <h3 class="mx-auto mb-0" style="flex:1; text-align:center;">Completed</h3>
+                            <button class="btn btn-sm btn-danger clear-completed-btn ms-auto" 
+                                onclick="clearCompletedTasks()" 
+                                title="Clear All Completed">
+                                <i class="bi bi-trash"></i>
+                                <span class="clear-text">Clear</span>
+                            </button>
+                        </div>
+                    `;
+
+                    // Collect all cards
+                    let todoTasks = 0, ongoingTasks = 0, completedTasks = 0;
+                    data.tasks.forEach(task => {
+                        if (!task) return; // skip invalid
+                        // Sanity check for missing subject to avoid ghost cards
+                        if (!task.subject && !task.description) return;
+
+                        const dropdown = `
+                            <div class="dropdown">
+                                <button class="btn btn-link p-0 m-0 text-dark" type="button" id="taskMenu${task.id}" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-three-dots-vertical fs-5"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskMenu${task.id}">
+                                    <li>
+                                        <a class="dropdown-item" href="#" onclick="openTaskModal('${task.id}', '${escapeHtml(task.subject)}', '${escapeHtml(task.description)}', '${escapeHtml(task.priority)}', '${escapeHtml(task.status)}', '${task.deadline ? task.deadline.replace(' ', 'T') : ''}'); return false;">
+                                        <i class="bi bi-pencil me-2"></i>Edit
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item text-danger" href="#" onclick="confirmDelete(${task.id}, '${escapeHtml(task.subject)}'); return false;">
+                                        <i class="bi bi-trash me-2"></i>Delete
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        `;
+
+                        // Build the card markup
+                        if (task.status === "Open") {
+                            const card = `
+                                <div class="task-card" id="task-${task.id}" draggable="true"
+                                    ondragstart="drag(event)" ondragend="dragEnd(event)">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span class="badge priority-badge priority-${task.priority ? task.priority.toLowerCase() : "medium"}">${task.priority || "Medium"}</span>
+                                        ${dropdown}
+                                    </div>
+                                    <h5>
+                                        ${task.web_link
+                                            ? `<a href="${task.web_link}" target="_blank" class="fw-bold task-link">${task.subject}</a>`
+                                            : task.subject}
+                                    </h5>
+                                    <div><strong>Deadline:</strong> ${formatDeadline(task.deadline)}</div>
+                                    <div class="mb-2">${task.description || ""}</div>
+                                </div>`;
+                            todoCol.innerHTML += card;
+                            todoTasks++;
+                        } else if (task.status === "Ongoing") {
+                            const card = `
+                                <div class="task-card" id="task-${task.id}" draggable="true"
+                                    ondragstart="drag(event)" ondragend="dragEnd(event)">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <span class="badge priority-badge priority-${task.priority ? task.priority.toLowerCase() : "medium"}">${task.priority || "Medium"}</span>
+                                        ${dropdown}
+                                    </div>
+                                    <h5>
+                                        ${task.web_link
+                                            ? `<a href="${task.web_link}" target="_blank" class="fw-bold task-link">${task.subject}</a>`
+                                            : task.subject}
+                                    </h5>
+                                    <div><strong>Deadline:</strong> ${formatDeadline(task.deadline)}</div>
+                                    <div class="mb-2">${task.description || ""}</div>
+                                </div>`;
+                            ongoingCol.innerHTML += card;
+                            ongoingTasks++;
+                        } else if (task.status === "Completed") {
+                            const card = `
+                                <div class="task-card completed" id="task-${task.id}" draggable="false">
+                                    <h5 class="text-decoration-line-through text-muted mb-1">
+                                        ${task.web_link
+                                            ? `<a href="${task.web_link}" target="_blank" class="text-muted text-decoration-none">${task.subject}</a>`
+                                            : task.subject}
+                                    </h5>
+                                    <div class="mb-2 text-decoration-line-through text-muted mb-1">${task.description || ""}</div>
+                                </div>`;
+                            completedCol.innerHTML += card;
+                            completedTasks++;
+                        }
+                    });
+
+                    // Add "No tasks" message if no tasks in column
+                    if (!todoTasks) todoCol.innerHTML += `<p class="no-tasks-message text-muted">No tasks</p>`;
+                    if (!ongoingTasks) ongoingCol.innerHTML += `<p class="no-tasks-message text-muted">No tasks</p>`;
+                    if (!completedTasks) completedCol.innerHTML += `<p class="no-tasks-message text-muted">No tasks</p>`;
+                });
+        }
+
+        function reloadListView() {
+            fetch('/tasks/all/?format=json')
+                .then(res => res.json())
+                .then(data => {
+                    const table = document.getElementById("taskTable");
+                    const allTbody = table.getElementsByTagName("tbody")[0]; // active tasks
+                    const completedCollapse = document.getElementById("completedTasksCollapse"); // completed
+
+                    allTbody.innerHTML = "";
+                    completedCollapse.innerHTML = "";
+
+                    let activeTasks = data.tasks.filter(
+                        t => t.status === "Open" || t.status === "Ongoing"
+                    );
+                    let completedTasks = data.tasks.filter(
+                        t => t.status === "Completed"
+                    );
+
+                    if (activeTasks.length === 0) {
+                        allTbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="text-center">No tasks found.</td>
+                            </tr>`;
+                    } else {
+                        activeTasks.forEach(task => {
+                            allTbody.innerHTML += `
+                                <tr>
+                                    <td>${task.subject}</td>
+                                    <td>${task.description || ""}</td>
+                                    <td style="text-align: center;">${task.priority}</td>
+                                    <td style="text-align: center;">${task.status}</td>
+                                    <td style="text-align: center;">${formatDeadline(task.deadline)}</td>
+                                    <td style="text-align: right;">
+                                        <div class="dropdown">
+                                            <button class="btn btn-link p-0 m-0 text-dark" type="button"
+                                                    id="taskListMenu${task.id}" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="bi bi-three-dots-vertical fs-5"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskListMenu${task.id}">
+                                            <li>
+                                                <a class="dropdown-item" href="#" onclick="openTaskModal('${task.id}', '${escapeHtml(task.subject)}', '${escapeHtml(task.description)}', '${escapeHtml(task.priority)}', '${escapeHtml(task.status)}', '${task.deadline ? task.deadline.replace(' ', 'T') : ''}'); return false;">
+                                                <i class="bi bi-pencil me-2"></i>Edit
+                                                </a>
+                                            </li>
+                                            <li>
+                                                <a class="dropdown-item text-danger" href="#" onclick="confirmDelete(${task.id}, '${escapeHtml(task.subject)}'); return false;">
+                                                <i class="bi bi-trash me-2"></i>Delete
+                                                </a>
+                                            </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    if (completedTasks.length === 0) {
+                        completedCollapse.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">No completed tasks.</td>
+                            </tr>`;
+                    } else {
+                        completedTasks.forEach(task => {
+                            completedCollapse.innerHTML += `
+                                <tr class="text-muted completed-task">
+                                    <td>${task.subject}</td>
+                                    <td>${task.description || ""}</td>
+                                    <td style="text-align: center;">${task.priority}</td>
+                                    <td style="text-align: center;">${task.status}</td>
+                                    <td style="text-align: center;">${formatDeadline(task.deadline) || ""}</td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    let showCompletedRow = table.querySelector(".show-completed-row");
+                    if (showCompletedRow) {
+                        showCompletedRow.innerHTML = `
+                            <a href="#completedTasksCollapse" class="show-completed-link" data-bs-toggle="collapse" data-bs-target="#completedTasksCollapse" aria-expanded="false" aria-controls="completedTasksCollapse">
+                                Show Completed Tasks (${completedTasks.length})
+                            </a>
+                        `;
+                    }
+                });
+        }
+
+        function reloadCalendarView() {
+            fetch('/tasks/all/?format=json')
+                .then(res => res.json())
+                .then(data => {
+                    let countsByDate = {};
+                    data.tasks.forEach(task => {
+                        if ((task.status === "Open" || task.status === "Ongoing") && task.deadline) {
+                            let dateStr = task.deadline.split(' ')[0];
+                            countsByDate[dateStr] = (countsByDate[dateStr] || 0) + 1;
+                        }
+                    });
+                    document.querySelectorAll('.calendar-td').forEach(td => {
+                        const date = td.getAttribute('data-date');
+                        const dayDiv = td.querySelector('.calendar-day');
+                        if (!dayDiv) return;
+
+                        dayDiv.querySelectorAll('.calendar-task-badge').forEach(badge => badge.remove());
+
+                        td.onclick = null;
+                        td.classList.remove('calendar-td-clickable');
+
+                        if (date && countsByDate[date]) {
+                            let newBadge = document.createElement("span");
+                            newBadge.className = "calendar-task-badge";
+                            newBadge.innerText = countsByDate[date];
+                            dayDiv.appendChild(newBadge);
+
+                            td.classList.add('calendar-td-clickable');
+                            td.onclick = function() {
+                                showDayTasks(date, dayDiv.querySelector('.calendar-day-number').innerText);
+                            };
+                        }
+                    });
+
+                    const hasAny = Object.keys(countsByDate).length > 0;
+                    const noTaskDiv = document.querySelector('.calendar-no-task-icon')?.parentElement;
+                    if (noTaskDiv) {
+                        noTaskDiv.style.display = hasAny ? 'none' : '';
+                    }
+                });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/["'\\]/g, '\\$&').replace(/\n/g, '\\n');
+        }
+
+        function clearCompletedTasks() {
+            if (!confirm("Are you sure you want to delete all completed tasks?")) return;
+            fetch('/tasks/delete-completed/', { method: 'POST', headers: {'X-CSRFToken': getCSRFToken('csrftoken')} })
+                .then(res => {
+                    if (res.ok) {
+                        showToast("All completed tasks deleted.");
+                        reloadKanbanBoard();
+                        reloadListView();
+                        reloadCalendarView();
+                    } else {
+                        showToast("Failed to delete completed tasks.");
+                    }
+                });
+        }
+
+        function updateTaskStatus(taskId, newStatus) {
+            fetch("/update-task-status/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRFToken": getCSRFToken(),
+                },
+                body: `task_id=${taskId.replace('task-', '')}&new_status=${capitalizeStatus(newStatus)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    alert("Failed to update task status: " + data.error);
+                } else {
+                    if (typeof reloadKanbanBoard === "function") reloadKanbanBoard();
+                    if (typeof reloadListView === "function") reloadListView();
+                    if (typeof reloadCalendarView === "function") reloadCalendarView();
+                }
+            });
+        }
+
         // On login (DOM loaded), sync once immediately
         document.addEventListener('DOMContentLoaded', function() {
             syncEmails();
+            reloadKanbanBoard();
+            reloadListView();
+            reloadCalendarView();
             setInterval(syncEmails, 5 * 60 * 1000);
         });
 
     </script>
+
+    {% if messages %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            {% for message in messages %}
+                showToast("{{ message|escapejs }}");
+            {% endfor %}
+        });
+    </script>
+    {% endif %}
 
 </body>
 </html>

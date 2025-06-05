@@ -5,6 +5,8 @@
 #     local_dir="Llama-3.1-8B-Instruct",
 #     use_auth_token=True
 # )
+# This script generate task descriptions from email content using a pre-trained LLM model.
+# This script is called at sync_emails_view
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel

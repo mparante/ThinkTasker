@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 from django.utils import timezone
 from langdetect import detect, LangDetectException
 from collections import defaultdict
-from . import todo, task_description, read_email
+from . import todo, task_description
 from calendar import month_name
 # import nltk
 # nltk.download('punkt_tab')
@@ -162,15 +162,41 @@ def _get_graph_token(request):
         return None
     return token_dict.get("access_token")
 
-def parse_iso_datetime(dt_str):
-    if not dt_str:
-        return None
-    try:
-        return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%SZ")
-    except Exception as e:
-        print("Error parsing date:", dt_str, e)
-        return None
+# Helper function to get calendar weeks for the calendar view
+# This function is called at index view
+def get_calendar_weeks(user, year, month):
+    tasks = ExtractedTask.objects.filter(
+        user=user,
+        deadline__year=year,
+        deadline__month=month,
+        status__in=["Open", "Ongoing"]
+    )
+    # Count tasks per day
+    task_counts = {}
+    for t in tasks:
+        d = t.deadline.date()
+        task_counts[d] = task_counts.get(d, 0) + 1
 
+    # Decide fullness per day
+    FULL_THRESHOLD = 8
+    cal = calendar.Calendar(firstweekday=6)
+    weeks = []
+    for week in cal.monthdatescalendar(year, month):
+        week_list = []
+        for day in week:
+            count = task_counts.get(day, 0)
+            week_list.append({
+                'day': day.day if day.month == month else '',
+                'date': day,
+                'task_count': count,
+                'is_full': count >= FULL_THRESHOLD,
+                'is_busy': count >= FULL_THRESHOLD // 2 and count < FULL_THRESHOLD,
+                'is_free': 0 < count < FULL_THRESHOLD // 2,
+            })
+        weeks.append(week_list)
+    return weeks
+
+# View for the main dashboard
 @login_required
 def index(request):
     query = request.GET.get("q", "")
@@ -211,12 +237,14 @@ def index(request):
         'has_tasks': has_tasks,
     })
 
+# View to get the tasks by date for the calendar view
 @login_required
 def tasks_by_date(request):
     date_str = request.GET.get('date')
     tasks = ExtractedTask.objects.filter(
         user=request.user, 
-        deadline__date=date_str
+        deadline__date=date_str,
+        status__in=["Open", "Ongoing"]
     ).order_by('priority', 'deadline')
     result = [{
         'subject': t.subject,
@@ -224,6 +252,142 @@ def tasks_by_date(request):
     } for t in tasks]
     return JsonResponse({'tasks': result})
 
+# Helper function to fetch full email body from the user's inbox
+# This function is called at sync_emails_view
+def fetch_full_email_body(message_id, access_token):
+    url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}?$select=body"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, headers=headers)
+    if resp.status_code == 200:
+        return resp.json().get("body", {}).get("content", "")
+    return ""
+
+# Helper function to fetch all emails from the user's inbox
+# This function is called at sync_emails_view
+def fetch_all_emails(access_token, folder="Inbox"):
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    emails = []
+    url = (
+        f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
+        "?$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
+        "&$top=50"
+    )
+    while url:
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            break
+        data = resp.json()
+        emails.extend(data.get("value", []))
+        url = data.get("@odata.nextLink", None)
+    return emails
+
+# Helper function to fetch all unread emails from the user's inbox
+# This function is called at sync_emails_view
+def fetch_unread_emails(access_token, folder="Inbox"):
+    headers = {
+        "Authorization": f"Bearer {access_token}"
+    }
+    emails = []
+    url = (
+        f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
+        "?$filter=isRead eq false"
+        "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
+        "&$top=50"
+    )
+    while url:
+        resp = requests.get(url, headers=headers)
+        if resp.status_code != 200:
+            break
+        data = resp.json()
+        emails.extend(data.get("value", []))
+        url = data.get("@odata.nextLink", None)
+    return emails
+
+# This function is called at sync_emails_view to mark emails as read.
+def batch_mark_emails_as_read(message_ids, access_token):
+    def chunked(lst, n):
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+    url = "https://graph.microsoft.com/v1.0/$batch"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    # 20 is Graph API batch limit
+    for chunk in chunked(message_ids, 20):
+        batch_requests = [
+            {
+                "id": str(i),
+                "method": "PATCH",
+                "url": f"/me/messages/{message_id}",
+                "headers": {"Content-Type": "application/json"},
+                "body": {"isRead": True}
+            }
+            for i, message_id in enumerate(chunk)
+        ]
+        batch_payload = {"requests": batch_requests}
+        resp = requests.post(url, json=batch_payload, headers=headers)
+        if resp.status_code != 200:
+            print(f"Batched marking emails as read failed: {resp.status_code} {resp.text}")
+
+# Helper function to clean all fetched emails from the user's inbox
+# This function is called at sync_emails_view and fetch_full_email_body
+def clean_email_text(text):
+    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
+    text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
+    text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
+    tokens = word_tokenize(text.lower())
+    stop_words = set(stopwords.words('english'))
+    tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
+    return tokens
+
+# Function to check if a text is in English
+# This function is called at sync_emails_view
+def get_reference_tokens():
+    references = ReferenceDocument.objects.all()
+    all_tokens = []
+    for ref in references:
+        combined = (ref.subject or "") + " " + ref.body
+        if not is_english(combined):
+            continue
+        if ref.tokens:
+            all_tokens.append(ref.tokens)
+        else:
+            tokens = clean_email_text(combined)
+            all_tokens.append(tokens)
+    
+    processed_refs = ProcessedEmail.objects.filter(is_reference=True)
+    for pe in processed_refs:
+        combined = (pe.subject or "") + " " + (pe.body_preview or "")
+        if is_english(combined):
+            tokens = clean_email_text(combined)
+            all_tokens.append(tokens)
+    return all_tokens
+
+def compute_tf(term, doc_tokens):
+    count = doc_tokens.count(term)
+    return 1 + math.log10(count) if count > 0 else 0
+
+def compute_idf(term, all_docs_tokens):
+    N = len(all_docs_tokens)
+    df = sum(1 for tokens in all_docs_tokens if term in tokens)
+    if df == 0:
+        return 0
+    return math.log10(N / df)
+
+def compute_cf(term, all_docs_tokens):
+    N = len(all_docs_tokens)
+    count = sum(tokens.count(term) for tokens in all_docs_tokens)
+    return count / N if N > 0 else 0
+
+def get_contextual_weight(term):
+    high_priority_terms = {'urgent', 'ASAP', 'emergency', 'field issue', 'escalate', 'critical', 'immediate attention'}
+    return 2.0 if term in high_priority_terms else 1.0
+
+# Helper function to fetch all emails from the user's inbox
+# This function is called at sync_emails_view
 def extract_actionable_items(text):
     patterns = ActionablePattern.objects.filter(is_active=True)
     found_patterns = []
@@ -239,6 +403,104 @@ def extract_actionable_items(text):
                 found_patterns.append(pattern)
     return found_patterns
 
+# Helper function called at sync_emails_view to parse ISO 8601 datetime strings
+def parse_iso_datetime(dt_str):
+    if not dt_str:
+        return None
+    try:
+        return datetime.strptime(dt_str, "%Y-%m-%dT%H:%M:%SZ")
+    except Exception as e:
+        print("Error parsing date:", dt_str, e)
+        return None
+
+# Helper function of extract_deadline, assign_deadline_and_priority_batch, and get_next_available_hour to add weekdays to a given date
+def add_weekdays(start, days):
+    current = start
+    added = 0
+    while added < days:
+        current += timedelta(days=1)
+        if current.weekday() < 5:
+            added += 1
+    return current
+
+# Helper function of extract_deadline to get the first day of the next month
+def first_of_next_month(dt):
+    if dt.month == 12:
+        return dt.replace(year=dt.year+1, month=1, day=1)
+    else:
+        return dt.replace(month=dt.month+1, day=1)
+
+# Function to extract deadlines from text, with support for various formats and relative dates
+# This function is called at sync_emails_view
+def extract_deadline(text, sent_date=None):
+    patterns = [
+        r'\bby ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
+        r'\bon ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
+        r'\bin (\d+) days?',
+        r'\b(tomorrow|today|now|next week|next month|next [A-Za-z]+)\b',
+        r'(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})',         # 2025/06/06 or 2025.06.06
+        r'(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})',         # 06/24/2025 or 06.24.2025
+        r'(\d{1,2}:\d{2}(?: ?[APMapm]{2})?)',         # 10:00, 3:00 PM
+        r'(\d{1,2} [A-Za-z]+ \d{4})',                 # 6 June 2025
+        r'([A-Za-z]+ \d{1,2},? \d{4})',               # June 6, 2025
+    ]
+    now = sent_date if sent_date else timezone.now()
+    # Default time for deadlines when the date string does not specify a time
+    base_hour = 10
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            date_str = match.group(1) if match.groups() else match.group(0)
+            date_str = date_str.strip()
+            try:
+                # Always parse with dayfirst=False (US style) MM/DD/YYYY
+                deadline = dateutil.parser.parse(date_str, default=now, fuzzy=True, dayfirst=False)
+                # Fix: "TypeError: can't compare offset-naive and offset-aware datetimes"
+                # Make deadline timezone-aware
+                if timezone.is_naive(deadline):
+                    deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
+                deadline = deadline.replace(second=0, microsecond=0)
+                # If no explicit time, set to base_hour
+                if 'AM' not in date_str.upper() and 'PM' not in date_str.upper() and deadline.hour == 0:
+                    deadline = deadline.replace(hour=base_hour, minute=0)
+                if deadline.year < 2000:
+                    continue
+                return deadline
+            except Exception:
+                pass
+
+            lc = date_str.lower()
+            if 'today' in lc or 'now' in lc:
+                dt = now.replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'tomorrow' in lc:
+                dt = add_weekdays(now, 1).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'days' in lc:
+                days = int(re.findall(r'\d+', date_str)[0])
+                dt = add_weekdays(now, days).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'next week' in lc:
+                days_ahead = (0 - now.weekday() + 7) % 7 or 7
+                dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif 'next month' in lc:
+                first = first_of_next_month(now)
+                dt = first.replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+            elif pattern.startswith('next ([A-Za-z]+)'):
+                weekday_str = match.group(1)
+                weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
+                if weekday_str.lower() in weekdays:
+                    days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
+                    if days_ahead == 0:
+                        days_ahead = 7
+                    dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
+                    return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
+    return None
+    
+# Function to fetch all unread emails from the user's inbox
+# This is the core function of ThinkTasker to sync emails
 @login_required
 def sync_emails_view(request):
     user = request.user
@@ -408,7 +670,7 @@ def sync_emails_view(request):
 
     # Batch mark all processed emails as read
     if message_ids_to_mark_read:
-        read_email.batch_mark_emails_as_read(message_ids_to_mark_read, access_token)
+        batch_mark_emails_as_read(message_ids_to_mark_read, access_token)
 
     # Update last synced date
     now_str = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
@@ -421,6 +683,73 @@ def sync_emails_view(request):
         "last_synced": now_str,
     })
 
+# View to create a new task
+@login_required
+def create_task(request):
+    if request.method == "POST":
+        form = ExtractedTaskForm(request.POST)
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.user = request.user
+            task.is_actionable = True
+            
+            # Use user-set deadline if provided, else auto-assign
+            deadline_str = request.POST.get("deadline")
+            if deadline_str:
+                task.deadline = timezone.make_aware(datetime.strptime(deadline_str, "%Y-%m-%dT%H:%M"))
+            else:
+                task.deadline = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
+
+            # To Do task creation
+            access_token = _get_graph_token(request)
+            todo_task_id, todo_list_id = todo.create_todo_task(
+                access_token,
+                task.subject,
+                task.task_description,
+                task.deadline
+            )
+            task.todo_task_id = todo_task_id
+            task.todo_list_id = todo_list_id
+            task.save()
+            messages.success(request, "Task added successfully!")
+            return redirect("dashboard")
+    else:
+        return redirect("dashboard")
+
+# View to edit an existing task
+@login_required
+def edit_task(request, task_id):
+    task = get_object_or_404(ExtractedTask, pk=task_id, user=request.user)
+    if request.method == "POST":
+        form = ExtractedTaskForm(request.POST, instance=task)
+        if form.is_valid():
+            updated_task = form.save(commit=False)
+            access_token = _get_graph_token(request)
+            todo_status_map = {
+                "open": "notStarted",
+                "ongoing": "inProgress",
+                "completed": "completed"
+            }
+            todo_status = todo_status_map.get(updated_task.status.lower(), "notStarted")
+            try:
+                todo.update_todo_task(
+                    access_token,
+                    task.todo_list_id,
+                    task.todo_task_id,
+                    title=updated_task.subject,
+                    description=updated_task.task_description,
+                    due_date=updated_task.deadline,
+                    status=todo_status
+                )
+            except Exception as e:
+                logger.warning(f"Failed to sync To Do update for task {updated_task.todo_task_id}: {e}")
+            updated_task.save()
+            messages.success(request, "Task updated!")
+            return redirect("dashboard")
+    else:
+        return redirect("dashboard")
+    
+# View to update the task status
 @csrf_exempt
 @login_required
 def update_task_status(request):
@@ -456,80 +785,24 @@ def update_task_status(request):
             return JsonResponse({"success": False, "error": "Task not found"})
     return JsonResponse({"success": False, "error": "Invalid request"})
 
-# @login_required
-# def task_list(request):
-#     query = request.GET.get("q", "")
-#     tasks = ExtractedTask.objects.filter(user=request.user)
-#     if query:
-#         tasks = tasks.filter(
-#             Q(subject__icontains=query) |
-#             Q(task_description__icontains=query)
-#         )
-#     tasks = tasks.annotate(priority_rank=priority_order).order_by('priority_rank', 'deadline', '-created_at')
-#     return render(request, "task_list.html", {"tasks": tasks, "query": query})
-
+# View to get all tasks in JSON format
 @login_required
-def create_task(request):
-    if request.method == "POST":
-        form = ExtractedTaskForm(request.POST)
-        if form.is_valid():
-            task = form.save(commit=False)
-            task.user = request.user
-            task.is_actionable = True
-            
-            # Use user-set deadline if provided, else auto-assign
-            deadline_str = request.POST.get("deadline")
-            if deadline_str:
-                task.deadline = timezone.make_aware(datetime.strptime(deadline_str, "%Y-%m-%dT%H:%M"))
-            else:
-                task.deadline = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
+def all_tasks_json(request):
+    tasks = ExtractedTask.objects.filter(user=request.user)
+    result = []
+    for t in tasks:
+        result.append({
+            "id": t.id,
+            "subject": t.subject,
+            "description": t.task_description,
+            "priority": t.priority,
+            "status": t.status,
+            "deadline": t.deadline.strftime("%Y-%m-%d %H:%M") if t.deadline else None,
+            "web_link": t.email.web_link if t.email else "",
+        })
+    return JsonResponse({"tasks": result})
 
-            # To Do task creation
-            access_token = _get_graph_token(request)
-            todo_task_id, todo_list_id = todo.create_todo_task(
-                access_token,
-                task.subject,
-                task.task_description,
-                task.deadline
-            )
-            task.todo_task_id = todo_task_id
-            task.todo_list_id = todo_list_id
-            task.save()
-            return redirect("dashboard")
-    else:
-        return redirect("dashboard")
-
-@login_required
-def edit_task(request, task_id):
-    task = get_object_or_404(ExtractedTask, pk=task_id, user=request.user)
-    if request.method == "POST":
-        form = ExtractedTaskForm(request.POST, instance=task)
-        if form.is_valid():
-            updated_task = form.save(commit=False)
-            access_token = _get_graph_token(request)
-            todo_status_map = {
-                "open": "notStarted",
-                "ongoing": "inProgress",
-                "completed": "completed"
-            }
-            todo_status = todo_status_map.get(updated_task.status.lower(), "notStarted")
-            try:
-                todo.update_todo_task(
-                    access_token,
-                    task.todo_list_id,
-                    task.todo_task_id,
-                    title=updated_task.subject,
-                    description=updated_task.task_description,
-                    due_date=updated_task.deadline,
-                    status=todo_status
-                )
-            except Exception as e:
-                logger.warning(f"Failed to sync To Do update for task {updated_task.todo_task_id}: {e}")
-            updated_task.save()
-            return redirect("dashboard")
-    else:
-        return redirect("dashboard")
-
+# View to delete a task
 @login_required
 @require_POST
 def delete_task(request, task_id):
@@ -539,7 +812,15 @@ def delete_task(request, task_id):
     if task.todo_task_id:
         todo.delete_todo_task(access_token, task.todo_list_id, task.todo_task_id)
     task.delete()
+    messages.success(request, "Task deleted.")
     return redirect("dashboard")
+
+# View to delete all completed tasks
+@require_POST
+@login_required
+def delete_completed_tasks(request):
+    ExtractedTask.objects.filter(user=request.user, status="Completed").delete()
+    return JsonResponse({'success': True})
 
 @login_required
 def settings_view(request):
@@ -549,120 +830,34 @@ def settings_view(request):
 def help_docs(request):
     return render(request, "help_docs.html")
 
-def clean_email_text(text):
-    text = BeautifulSoup(text, "html.parser").get_text(separator=" ")
-    text = re.sub(r"(?i)(Best regards|Regards|BR|Sent from my|Sincerely|Thanks|Thank you|Yours truly|Cheers)[\s\S]+", "", text)
-    text = re.sub(r"(?i)^(hi|hello|dear|good morning|good afternoon|good evening)[^,]*,?", "", text.strip())
-    tokens = word_tokenize(text.lower())
-    stop_words = set(stopwords.words('english'))
-    tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
-    return tokens
-
-def compute_tf(term, doc_tokens):
-    count = doc_tokens.count(term)
-    return 1 + math.log10(count) if count > 0 else 0
-
-def compute_idf(term, all_docs_tokens):
-    N = len(all_docs_tokens)
-    df = sum(1 for tokens in all_docs_tokens if term in tokens)
-    if df == 0:
-        return 0
-    return math.log10(N / df)
-
-def compute_cf(term, all_docs_tokens):
-    N = len(all_docs_tokens)
-    count = sum(tokens.count(term) for tokens in all_docs_tokens)
-    return count / N if N > 0 else 0
-
-def get_contextual_weight(term):
-    high_priority_terms = {'urgent', 'ASAP', 'emergency', 'field issue', 'escalate', 'critical', 'immediate attention'}
-    return 2.0 if term in high_priority_terms else 1.0
-
-def extract_deadline(text, sent_date=None):
-    patterns = [
-        r'\bby ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
-        r'\bon ([A-Za-z]+\s\d{1,2}(?:,\s*\d{4})?)',
-        r'\bin (\d+) days?',
-        r'\b(tomorrow|today|now|next week|next month|next [A-Za-z]+)\b',
-        r'(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})',         # 2025/06/06 or 2025.06.06
-        r'(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4})',         # 06/24/2025 or 06.24.2025
-        r'(\d{1,2}:\d{2}(?: ?[APMapm]{2})?)',         # 10:00, 3:00 PM
-        r'(\d{1,2} [A-Za-z]+ \d{4})',                 # 6 June 2025
-        r'([A-Za-z]+ \d{1,2},? \d{4})',               # June 6, 2025
-    ]
-    now = sent_date if sent_date else timezone.now()
-    # Default time for deadlines when the date string does not specify a time
-    base_hour = 10
-
-    for pattern in patterns:
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            date_str = match.group(1) if match.groups() else match.group(0)
-            date_str = date_str.strip()
-            try:
-                # Always parse with dayfirst=False (US style) MM/DD/YYYY
-                deadline = dateutil.parser.parse(date_str, default=now, fuzzy=True, dayfirst=False)
-                # Fix: "TypeError: can't compare offset-naive and offset-aware datetimes"
-                # Make deadline timezone-aware
-                if timezone.is_naive(deadline):
-                    deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
-                deadline = deadline.replace(second=0, microsecond=0)
-                # If no explicit time, set to base_hour
-                if 'AM' not in date_str.upper() and 'PM' not in date_str.upper() and deadline.hour == 0:
-                    deadline = deadline.replace(hour=base_hour, minute=0)
-                if deadline.year < 2000:
-                    continue
-                return deadline
-            except Exception:
-                pass
-
-            lc = date_str.lower()
-            if 'today' in lc or 'now' in lc:
-                dt = now.replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-            elif 'tomorrow' in lc:
-                dt = add_weekdays(now, 1).replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-            elif 'days' in lc:
-                days = int(re.findall(r'\d+', date_str)[0])
-                dt = add_weekdays(now, days).replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-            elif 'next week' in lc:
-                days_ahead = (0 - now.weekday() + 7) % 7 or 7
-                dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-            elif 'next month' in lc:
-                first = first_of_next_month(now)
-                dt = first.replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-            elif pattern.startswith('next ([A-Za-z]+)'):
-                weekday_str = match.group(1)
-                weekdays = {day.lower(): i for i, day in enumerate(calendar.day_name)}
-                if weekday_str.lower() in weekdays:
-                    days_ahead = (weekdays[weekday_str.lower()] - now.weekday() + 7) % 7
-                    if days_ahead == 0:
-                        days_ahead = 7
-                    dt = (now + timedelta(days=days_ahead)).replace(hour=base_hour, minute=0, second=0, microsecond=0)
-                    return dt if not timezone.is_naive(dt) else timezone.make_aware(dt, timezone.get_current_timezone())
-    return None
+# Helper function of assign_deadline_and_priority_batch to return priority rank in a numeric format
+def get_priority_rank(priority):
+    return {"Urgent": 3, "Important": 2, "Medium": 1, "Low": 0}.get(priority, 0)
 
 def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
-
     if now is None:
         now = timezone.now()
     WORK_HOURS = [9, 10, 11, 13, 14, 15, 16, 17, 18]
 
-    # Group new actionable tasks by day
     tasks_by_day = defaultdict(list)
     for t in actionable_tasks:
-        d = t["extracted_deadline"]
-        # If deadline is past (delayed), schedule for today or else use extracted
-        day = (d if d and d >= now else now).astimezone(timezone.get_current_timezone()).date()
-        t["original_day"] = day
-        tasks_by_day[day].append(t)
+        if isinstance(t, dict):
+            d = t.get("extracted_deadline") or t.get("deadline")
+            day = (d if d and d >= now else now).astimezone(timezone.get_current_timezone()).date()
+            t["original_day"] = day
+            tasks_by_day[day].append(t)
+        else:
+            d = t.deadline
+            day = (d if d and d >= now else now).astimezone(timezone.get_current_timezone()).date()
+            tasks_by_day[day].append({
+                "is_new": False,
+                "obj": t,
+                "priority": t.priority,
+                "subject": t.subject,
+                "deadline": t.deadline,
+            })
 
-    # For each day, process all open and new tasks together
     for day, new_tasks in tasks_by_day.items():
-        # Get all open (DB) tasks for that day
         existing_tasks = list(
             ExtractedTask.objects.filter(
                 user=user,
@@ -679,14 +874,24 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
                 "subject": t.subject,
                 "deadline": t.deadline,
             })
+
         for t in new_tasks:
-            combined.append({
-                "is_new": True,
-                "obj": t,
-                "priority": t["priority"],
-                "subject": t["subject"],
-                "deadline": t["extracted_deadline"],
-            })
+            if isinstance(t, dict):
+                combined.append({
+                    "is_new": t.get("is_new", True),
+                    "obj": t.get("obj", t),
+                    "priority": t.get("priority", "Medium"),
+                    "subject": t.get("subject", ""),
+                    "deadline": t.get("extracted_deadline") or t.get("deadline"),
+                })
+            else:
+                combined.append({
+                    "is_new": False,
+                    "obj": t,
+                    "priority": getattr(t, "priority", "Medium"),
+                    "subject": getattr(t, "subject", ""),
+                    "deadline": getattr(t, "deadline", now),
+                })
 
         # Sort high priority first, then earlier deadline first
         combined.sort(key=lambda x: (-get_priority_rank(x["priority"]), x["deadline"] or now))
@@ -717,7 +922,11 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
         if overflow:
             for t in overflow:
                 t["extracted_deadline"] = add_weekdays(datetime.combine(day, datetime.min.time()), 1)
-            assign_deadline_and_priority_batch(user, [t["obj"] for t in overflow], now=add_weekdays(now, 1))
+            assign_deadline_and_priority_batch(
+                user,
+                [t["obj"] if isinstance(t, dict) else t for t in overflow],
+                now=add_weekdays(now, 1)
+            )
 
         # Bulk update all existing tasks that need a new deadline
         tasks_to_update = []
@@ -731,6 +940,7 @@ def assign_deadline_and_priority_batch(user, actionable_tasks, now=None):
         if tasks_to_update:
             ExtractedTask.objects.bulk_update(tasks_to_update, ['deadline'])
 
+# Helper function of recommended_deadline to get the next available hour for a user on a specific day
 def get_next_available_hour(user, day):
     existing_deadlines = list(
         ExtractedTask.objects.filter(
@@ -745,6 +955,7 @@ def get_next_available_hour(user, day):
     next_day = add_weekdays(day, 1)
     return next_day.replace(hour=WORK_START, minute=0, second=0, microsecond=0)
 
+# View for opened task modal
 @login_required
 def recommended_deadline(request):
     priority = request.GET.get("priority", "Medium")
@@ -752,134 +963,3 @@ def recommended_deadline(request):
     recommended_dt = get_next_available_hour(request.user, timezone.localtime(timezone.now()))
     recommended_str = recommended_dt.strftime("%Y-%m-%d %H:%M")
     return JsonResponse({"recommended_deadline": recommended_str})
-
-def get_priority_rank(priority):
-    return {"Urgent": 3, "Important": 2, "Medium": 1, "Low": 0}.get(priority, 0)
-
-def add_weekdays(start, days):
-    current = start
-    added = 0
-    while added < days:
-        current += timedelta(days=1)
-        if current.weekday() < 5:
-            added += 1
-    return current
-
-def first_of_next_month(dt):
-    if dt.month == 12:
-        return dt.replace(year=dt.year+1, month=1, day=1)
-    else:
-        return dt.replace(month=dt.month+1, day=1)
-
-def fetch_all_emails(access_token, folder="Inbox"):
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    emails = []
-    url = (
-        f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
-        "?$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
-        "&$top=50"
-    )
-    while url:
-        resp = requests.get(url, headers=headers)
-        if resp.status_code != 200:
-            break
-        data = resp.json()
-        emails.extend(data.get("value", []))
-        url = data.get("@odata.nextLink", None)
-    return emails
-
-def fetch_unread_emails(access_token, folder="Inbox"):
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-    emails = []
-    url = (
-        f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder}/messages"
-        "?$filter=isRead eq false"
-        "&$select=id,subject,bodyPreview,receivedDateTime,from,isRead,webLink,importance,toRecipients"
-        "&$top=50"
-    )
-    while url:
-        resp = requests.get(url, headers=headers)
-        if resp.status_code != 200:
-            break
-        data = resp.json()
-        emails.extend(data.get("value", []))
-        url = data.get("@odata.nextLink", None)
-    return emails
-
-def fetch_full_email_body(message_id, access_token):
-    url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}?$select=body"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    resp = requests.get(url, headers=headers)
-    if resp.status_code == 200:
-        return resp.json().get("body", {}).get("content", "")
-    return ""
-
-def mark_email_as_read(message_id, access_token):
-    url = f"https://graph.microsoft.com/v1.0/me/messages/{message_id}"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "isRead": True
-    }
-    resp = requests.patch(url, json=payload, headers=headers)
-    return resp.status_code == 200
-
-def get_reference_tokens():
-    references = ReferenceDocument.objects.all()
-    all_tokens = []
-    for ref in references:
-        combined = (ref.subject or "") + " " + ref.body
-        if not is_english(combined):
-            continue
-        if ref.tokens:
-            all_tokens.append(ref.tokens)
-        else:
-            tokens = clean_email_text(combined)
-            all_tokens.append(tokens)
-    
-    processed_refs = ProcessedEmail.objects.filter(is_reference=True)
-    for pe in processed_refs:
-        combined = (pe.subject or "") + " " + (pe.body_preview or "")
-        if is_english(combined):
-            tokens = clean_email_text(combined)
-            all_tokens.append(tokens)
-    return all_tokens
-
-def get_calendar_weeks(user, year, month):
-    # Fetch all tasks for this month for this user
-    from datetime import date
-    tasks = ExtractedTask.objects.filter(
-        user=user,
-        deadline__year=year,
-        deadline__month=month
-    )
-    # Count tasks per day
-    task_counts = {}
-    for t in tasks:
-        d = t.deadline.date()
-        task_counts[d] = task_counts.get(d, 0) + 1
-
-    # Decide fullness per day
-    FULL_THRESHOLD = 8
-    cal = calendar.Calendar(firstweekday=6)
-    weeks = []
-    for week in cal.monthdatescalendar(year, month):
-        week_list = []
-        for day in week:
-            count = task_counts.get(day, 0)
-            week_list.append({
-                'day': day.day if day.month == month else '',
-                'date': day,
-                'task_count': count,
-                'is_full': count >= FULL_THRESHOLD,
-                'is_busy': count >= FULL_THRESHOLD // 2 and count < FULL_THRESHOLD,
-                'is_free': 0 < count < FULL_THRESHOLD // 2,
-            })
-        weeks.append(week_list)
-    return weeks
