@@ -78,7 +78,7 @@ class ExtractedTask(models.Model):
     task_description = models.TextField()
     actionable_patterns = models.JSONField(default=list, blank=True)
     priority = models.CharField(max_length=16, blank=True)
-    deadline = models.DateTimeField(null=True, blank=True)
+    deadline = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=32, default="Open")
     created_at = models.DateTimeField(auto_now_add=True)
     todo_task_id = models.CharField(max_length=128, blank=True, null=True)

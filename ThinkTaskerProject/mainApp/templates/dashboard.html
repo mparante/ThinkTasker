@@ -81,7 +81,7 @@
                                             '{{ task.task_description|escapejs }}',
                                             '{{ task.priority|escapejs }}',
                                             '{{ task.status|escapejs }}',
-                                            '{{ task.deadline|date:'Y-m-d\\TH:i' }}'
+                                            '{{ task.deadline|date:'Y-m-d' }}'
                                             ); return false;">
                                             <i class="bi bi-pencil me-2"></i>Edit
                                         </a></li>
@@ -101,7 +101,7 @@
                             </h5>
                             <div>
                                 <strong>Deadline:</strong>
-                                {{ task.deadline|date:"M d, H:i" }}
+                                {{ task.deadline|date:"M d" }}
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
                         </div>                    
@@ -127,7 +127,7 @@
                                             '{{ task.task_description|escapejs }}',
                                             '{{ task.priority|escapejs }}',
                                             '{{ task.status|escapejs }}',
-                                            '{{ task.deadline|date:'Y-m-d\\TH:i' }}'
+                                            '{{ task.deadline|date:'Y-m-d' }}'
                                             ); return false;">
                                             <i class="bi bi-pencil me-2"></i>Edit
                                         </a></li>
@@ -147,7 +147,7 @@
                             </h5>
                             <div>
                                 <strong>Deadline:</strong>
-                                {{ task.deadline|date:"M d, H:i" }}
+                                {{ task.deadline|date:"M d" }}
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
                         </div>
@@ -183,7 +183,7 @@
             <div class="d-flex justify-content-end align-items-center mb-3">
                 <div id="sync-status-bar" class="d-flex align-items-center">
                     <span class="fst-italic text-muted" id="last-sync-text_list">
-                        Last Sync: {{ last_synced|date:"M d, Y H:i" }}
+                        Last Sync: {{ last_synced|date:"M d" }}
                     </span>
                     <button class="btn btn-sm btn-outline-primary ms-3" id="manual-sync-btn" onclick="syncEmails()">
                         Sync Now
@@ -219,7 +219,7 @@
                             <td>{{ task.task_description }}</td>
                             <td style="text-align: center;">{{ task.priority }}</td>
                             <td style="text-align: center;">{{ task.status }}</td>
-                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
+                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}</td>
                             <td style="text-align: right;">
                                 <div class="dropdown">
                                     <button class="btn btn-link p-0 m-0 text-dark" type="button"
@@ -228,7 +228,7 @@
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="taskListMenu{{ task.id }}">
                                     <li>
-                                        <a class="dropdown-item" href="#" onclick="openTaskModal('{{ task.id }}', '{{ task.subject|escapejs }}', '{{ task.task_description|escapejs }}', '{{ task.priority|escapejs }}', '{{ task.status|escapejs }}', '{{ task.deadline|date:'Y-m-d\\TH:i' }}'); return false;">
+                                        <a class="dropdown-item" href="#" onclick="openTaskModal('{{ task.id }}', '{{ task.subject|escapejs }}', '{{ task.task_description|escapejs }}', '{{ task.priority|escapejs }}', '{{ task.status|escapejs }}', '{{ task.deadline|date:'Y-m-d' }}'); return false;">
                                         <i class="bi bi-pencil me-2"></i>Edit
                                         </a>
                                     </li>
@@ -258,7 +258,7 @@
                             <td>{{ task.task_description }}</td>
                             <td style="text-align: center;">{{ task.priority }}</td>
                             <td style="text-align: center;">{{ task.status }}</td>
-                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"F d H:i" }}{% endif %}</td>
+                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -377,7 +377,7 @@
                     </div>
                     <div class="mb-3">
                         <label for="modalDeadline" class="form-label">Deadline</label>
-                        <input type="datetime-local" name="deadline" class="form-control" id="modalDeadline">
+                        <input type="date" name="deadline" class="form-control" id="modalDeadline">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -460,27 +460,18 @@
             const deadlineInput = document.getElementById("modalDeadline");
             const priorityInput = document.getElementById("modalPriority");
             if (!id) {
-                fetchRecommendedDeadline(priorityInput.value, deadlineInput);
-                priorityInput.onchange = function() {
-                    fetchRecommendedDeadline(this.value, deadlineInput);
-                };
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                deadlineInput.value = `${yyyy}-${mm}-${dd}`;
+                priorityInput.onchange = null;
             } else {
                 deadlineInput.value = deadline || "";
                 priorityInput.onchange = null;
             }
             var modal = new bootstrap.Modal(document.getElementById('taskModal'));
             modal.show();
-        }
-
-        function fetchRecommendedDeadline(priority, inputElem) {
-            fetch(`/tasks/recommended-deadline/?priority=${encodeURIComponent(priority)}`)
-            .then(res => res.json())
-            .then(data => {
-                inputElem.value = data.recommended_deadline || "";
-            })
-            .catch(() => {
-                inputElem.value = "";
-            });
         }
 
         function confirmDelete(id, subject) {

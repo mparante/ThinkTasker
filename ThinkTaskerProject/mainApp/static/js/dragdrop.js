@@ -152,19 +152,18 @@ function capitalizeStatus(status) {
     return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function formatDeadline(dateString) {
+function formatDeadline(dateString) { 
     if (!dateString) return "";
-    
-    const parts = dateString.split(" ");
-    if (parts.length !== 2) return dateString;
-    
-    const [date, time] = parts;
-    const [year, month, day] = date.split('-').map(Number);
-    const [hour, minute] = time.split(':').map(Number);
 
-    const d = new Date(year, month - 1, day, hour, minute);
+    // Expected format: "YYYY-MM-DD"
+    const [year, month, day] = dateString.split('-').map(Number);
+    if (!year || !month || !day) return dateString;
 
-    const options = { month: 'short' };
-    const monthStr = d.toLocaleString('en-US', options);
-    return `${monthStr} ${day} - ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    const d = new Date(year, month - 1, day);
+
+    // Get full month name in English
+    const monthStr = d.toLocaleString('en-US', { month: 'long' });
+    const dayStr = d.getDate().toString().padStart(2, '0');
+
+    return `${monthStr} ${dayStr}`;
 }

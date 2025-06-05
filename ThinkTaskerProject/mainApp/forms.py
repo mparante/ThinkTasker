@@ -4,10 +4,10 @@ from django import forms
 from .models import ExtractedTask
 
 class ExtractedTaskForm(forms.ModelForm):
-    deadline = forms.DateTimeField(
+    deadline = forms.DateField(
         required=False,
-        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}),
-        input_formats=['%Y-%m-%dT%H:%M']
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        input_formats=['%Y-%m-%d']
     )
 
     class Meta:
@@ -29,6 +29,5 @@ class ExtractedTaskForm(forms.ModelForm):
             'status': forms.Select(choices=[
                 ('Open', 'Open'),
                 ('Ongoing', 'Ongoing'),
-                ('Completed', 'Completed'),
             ]),
         }

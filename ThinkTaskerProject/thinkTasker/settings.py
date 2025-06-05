@@ -137,12 +137,15 @@ GRAPH_SCOPE = [
     "User.ReadWrite",
     "Tasks.Read",
     "Tasks.ReadWrite",
+    "Mail.Read",
+    "Mail.ReadBasic",
+    "Mail.ReadWrite",
 ]
 
 AUTH_USER_MODEL = 'mainApp.ThinkTaskerUser'
-LOGIN_URL = '/'
-LOGIN_REDIRECT_URL = '/dashboard/'
-LOGOUT_REDIRECT_URL = '/'
+LOGIN_URL = '/login'
+LOGIN_REDIRECT_URL = '/login'
+LOGOUT_REDIRECT_URL = '/login'
 
 TIME_ZONE = 'Asia/Tokyo'
 
