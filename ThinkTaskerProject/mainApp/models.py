@@ -81,6 +81,7 @@ class ExtractedTask(models.Model):
     deadline = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=32, default="Open")
     created_at = models.DateTimeField(auto_now_add=True)
+    is_delayed = models.BooleanField(default=False)
     todo_task_id = models.CharField(max_length=128, blank=True, null=True)
     todo_list_id = models.CharField(max_length=128, blank=True, null=True)
 

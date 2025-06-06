@@ -102,6 +102,14 @@
                             <div>
                                 <strong>Deadline:</strong>
                                 {{ task.deadline|date:"M d" }}
+                                {% if task.is_delayed %}
+                                    <span class="delayed-badge">(Delayed)</span>
+                                {% endif %}
+                                {% if task.priority|lower == "urgent" and task.is_delayed %}
+                                    <span class="ms-2 text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                    </span>
+                                {% endif %}
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
                         </div>                    
@@ -145,9 +153,17 @@
                                     {{ task.subject|default:"Untitled Task" }}
                                 {% endif %}
                             </h5>
-                            <div>
+                            <div class="task-card {% if task.is_delayed %}delayed{% endif %}">
                                 <strong>Deadline:</strong>
                                 {{ task.deadline|date:"M d" }}
+                                {% if task.is_delayed %}
+                                    <span class="delayed-badge">(Delayed)</span>
+                                {% endif %}
+                                {% if task.priority|lower == "urgent" and task.is_delayed %}
+                                    <span class="ms-2 text-danger">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                    </span>
+                                {% endif %}
                             </div>
                             <div class="mb-2">{{ task.task_description }}</div>
                         </div>
@@ -214,12 +230,22 @@
                     <!-- Open and Ongoing Task List -->
                     <tbody>
                         {% for task in active_tasks %}
-                        <tr>
-                            <td>{{ task.subject }}</td>
+                        <tr class="task-row{% if task.is_delayed %} delayed{% endif %}">
+                            <td>
+                                {% if task.priority|lower == "urgent" and task.is_delayed %}
+                                    <span class="ms-2 text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>
+                                {% endif %}
+                                {{ task.subject }}
+                            </td>
                             <td>{{ task.task_description }}</td>
                             <td style="text-align: center;">{{ task.priority }}</td>
                             <td style="text-align: center;">{{ task.status }}</td>
-                            <td style="text-align: center;">{% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}</td>
+                            <td style="text-align: center;">
+                                {% if task.deadline %}{{ task.deadline|date:"M d" }}{% endif %}
+                                {% if task.is_delayed %}
+                                    <span class="delayed-badge">(Delayed)</span>
+                                {% endif %}
+                            </td>
                             <td style="text-align: right;">
                                 <div class="dropdown">
                                     <button class="btn btn-link p-0 m-0 text-dark" type="button"
@@ -271,13 +297,17 @@
             <div class="calendar-container">
                 <div class="card calendar-card">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <div class="d-flex align-items-center calendar-header-gap">
-                            <h3 class="mb-0">
-                                <span class="calendar-month-label">
-                                    {{ month_name }} {{ year }}
-                                </span>
-                            </h3>
-                        </div>
+                        <button class="btn btn-link calendar-arrow" id="calendar-prev" title="Previous Month">
+                            <i class="bi bi-chevron-left fs-3"></i>
+                        </button>
+                        <h3 class="mb-0">
+                            <span class="calendar-month-label">
+                                {{ month_name }} {{ year }}
+                            </span>
+                        </h3>
+                        <button class="btn btn-link calendar-arrow" id="calendar-next" title="Next Month">
+                            <i class="bi bi-chevron-right fs-3"></i>
+                        </button>
                     </div>
                     <table class="table table-bordered text-center align-middle mb-0 calendar-table">
                         <colgroup>
@@ -344,6 +374,7 @@
             <div class="modal-content">
             <form id="taskForm" method="post" action="{% url 'create_task' %}">
                 {% csrf_token %}
+                <input type="hidden" name="view" id="currentViewInput" value="">
                 <input type="hidden" name="task_id" id="modalTaskId">
                 <div class="modal-header">
                     <h5 class="modal-title" id="taskModalTitle">Add Task</h5>
@@ -372,7 +403,6 @@
                         <select name="status" class="form-select" id="modalStatus">
                             <option value="Open">Open</option>
                             <option value="Ongoing">Ongoing</option>
-                            <option value="Completed">Completed</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -395,6 +425,7 @@
             <div class="modal-content">
             <form id="deleteForm" method="post" action="">
                 {% csrf_token %}
+                <input type="hidden" name="view" id="currentViewInput" value="">
                 <div class="modal-header">
                     <h5 class="modal-title">Delete Task</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -456,6 +487,7 @@
             document.getElementById("modalPriority").value = priority || "Medium";
             document.getElementById("modalStatus").value = status || "Open";
             document.getElementById("taskForm").action = id ? `/tasks/edit/${id}/` : "{% url 'create_task' %}";
+            document.getElementById("currentViewInput").value = getCurrentView();
 
             const deadlineInput = document.getElementById("modalDeadline");
             const priorityInput = document.getElementById("modalPriority");
@@ -477,6 +509,8 @@
         function confirmDelete(id, subject) {
             document.getElementById("deleteForm").action = `/tasks/delete/${id}/`;
             document.getElementById("deleteTaskSubject").textContent = subject || "this task";
+            document.getElementById("currentViewInput").value = getCurrentView();
+
             var modal = new bootstrap.Modal(document.getElementById('deleteModal'));
             modal.show();
         }
@@ -491,21 +525,38 @@
         }
 
         function showBoard() {
+            reloadKanbanBoard();
             hideAllViews();
             document.getElementById("kanbanBoard").style.display = "block";
             document.getElementById("btnBoard").classList.add("active");
+            setViewInUrl('kanban');
         }
 
         function showList() {
+            reloadListView(); 
             hideAllViews();
             document.getElementById("taskList").style.display = "block";
             document.getElementById("btnList").classList.add("active");
+            setViewInUrl('list');
         }
 
         function showCalendar() {
+            reloadCalendarView();
             hideAllViews();
             document.getElementById("calendarView").style.display = "block";
             document.getElementById("btnCalendar").classList.add("active");
+            setViewInUrl('calendar');
+        }
+
+        function setViewInUrl(view) {
+            const url = new URL(window.location);
+            url.searchParams.set('view', view);
+            window.history.replaceState({}, '', url);
+        }
+
+        function getCurrentView() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('view') || 'kanban'; // default to kanban
         }
 
         function syncEmails(showSpinner = true) {
@@ -533,7 +584,19 @@
                     "Last Sync: " + data.last_synced;
                 // Show a success message
                 if (data.new_tasks && data.new_tasks.length > 0) {
-                    showToast(`${data.new_tasks.length} new actionable task${data.new_tasks.length > 1 ? "s" : ""} added!`);
+                    showToast(`${data.new_tasks.length} new actionable task${data.new_tasks.length > 1 ? "s" : ""} added!`);                    
+                }
+
+                // Reload the current view
+                const currentView = getCurrentView();
+                if (currentView === 'kanban') {
+                    reloadKanbanBoard();
+                } else if (currentView === 'list') {
+                    reloadListView();
+                } else if (currentView === 'calendar') {
+                    reloadCalendarView();
+                } else {
+                    // Fallback: reload all views
                     reloadKanbanBoard();
                     reloadListView();
                     reloadCalendarView();
@@ -603,7 +666,7 @@
                         if (!task) return; // skip invalid
                         // Sanity check for missing subject to avoid ghost cards
                         if (!task.subject && !task.description) return;
-
+                            
                         const dropdown = `
                             <div class="dropdown">
                                 <button class="btn btn-link p-0 m-0 text-dark" type="button" id="taskMenu${task.id}" data-bs-toggle="dropdown" aria-expanded="false">
@@ -623,55 +686,49 @@
                                 </ul>
                             </div>
                         `;
-
-                        // Build the card markup
-                        if (task.status === "Open") {
-                            const card = `
-                                <div class="task-card" id="task-${task.id}" draggable="true"
-                                    ondragstart="drag(event)" ondragend="dragEnd(event)">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <span class="badge priority-badge priority-${task.priority ? task.priority.toLowerCase() : "medium"}">${task.priority || "Medium"}</span>
-                                        ${dropdown}
-                                    </div>
-                                    <h5>
-                                        ${task.web_link
-                                            ? `<a href="${task.web_link}" target="_blank" class="fw-bold task-link">${task.subject}</a>`
-                                            : task.subject}
-                                    </h5>
-                                    <div><strong>Deadline:</strong> ${formatDeadline(task.deadline)}</div>
+                        
+                        const isUrgent = task.priority && task.priority.toLowerCase() === "urgent";
+                        const warningIcon = (isUrgent && task.is_delayed)
+                            ? '<span class="ms-2 text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>'
+                            : '';
+                        const card = `
+                            <div class="task-card${task.is_delayed ? ' delayed' : ''}" id="task-${task.id}" draggable="true"
+                                ondragstart="drag(event)" ondragend="dragEnd(event)">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <span class="badge priority-badge priority-${task.priority ? task.priority.toLowerCase() : "medium"}">${task.priority || "Medium"}</span>
+                                    ${dropdown}
+                                </div>
+                                <h5>
+                                    ${task.web_link
+                                        ? `<a href="${task.web_link}" target="_blank" class="fw-bold task-link">${task.subject}</a>`
+                                        : task.subject}
+                                </h5>
+                                <div>
+                                    <strong>Deadline:</strong> ${formatDeadline(task.deadline)}
+                                    ${task.is_delayed ? '<span class="delayed-badge">(Delayed)</span>' : ''}
+                                    ${warningIcon}
+                                </div>
                                     <div class="mb-2">${task.description || ""}</div>
-                                </div>`;
+                            </div>`;
+
+                        const card_complete = `
+                            <div class="task-card completed" id="task-${task.id}" draggable="false">
+                                <h5 class="text-decoration-line-through text-muted mb-1">
+                                    ${task.web_link
+                                        ? `<a href="${task.web_link}" target="_blank" class="text-muted text-decoration-none">${task.subject}</a>`
+                                        : task.subject}
+                                </h5>
+                                <div class="mb-2 text-decoration-line-through text-muted mb-1">${task.description || ""}</div>
+                            </div>`;
+
+                        if (task.status === "Open") {
                             todoCol.innerHTML += card;
                             todoTasks++;
                         } else if (task.status === "Ongoing") {
-                            const card = `
-                                <div class="task-card" id="task-${task.id}" draggable="true"
-                                    ondragstart="drag(event)" ondragend="dragEnd(event)">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <span class="badge priority-badge priority-${task.priority ? task.priority.toLowerCase() : "medium"}">${task.priority || "Medium"}</span>
-                                        ${dropdown}
-                                    </div>
-                                    <h5>
-                                        ${task.web_link
-                                            ? `<a href="${task.web_link}" target="_blank" class="fw-bold task-link">${task.subject}</a>`
-                                            : task.subject}
-                                    </h5>
-                                    <div><strong>Deadline:</strong> ${formatDeadline(task.deadline)}</div>
-                                    <div class="mb-2">${task.description || ""}</div>
-                                </div>`;
                             ongoingCol.innerHTML += card;
                             ongoingTasks++;
-                        } else if (task.status === "Completed") {
-                            const card = `
-                                <div class="task-card completed" id="task-${task.id}" draggable="false">
-                                    <h5 class="text-decoration-line-through text-muted mb-1">
-                                        ${task.web_link
-                                            ? `<a href="${task.web_link}" target="_blank" class="text-muted text-decoration-none">${task.subject}</a>`
-                                            : task.subject}
-                                    </h5>
-                                    <div class="mb-2 text-decoration-line-through text-muted mb-1">${task.description || ""}</div>
-                                </div>`;
-                            completedCol.innerHTML += card;
+                        } else if (task.status === "Completed") {                            
+                            completedCol.innerHTML += card_complete;
                             completedTasks++;
                         }
                     });
@@ -691,6 +748,11 @@
                     const allTbody = table.getElementsByTagName("tbody")[0]; // active tasks
                     const completedCollapse = document.getElementById("completedTasksCollapse"); // completed
 
+                    const isUrgent = task.priority && task.priority.toLowerCase() === "urgent";
+                    const warningIcon = (isUrgent && task.is_delayed)
+                        ? '<span class="ms-2 text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>'
+                        : '';
+
                     allTbody.innerHTML = "";
                     completedCollapse.innerHTML = "";
 
@@ -709,12 +771,18 @@
                     } else {
                         activeTasks.forEach(task => {
                             allTbody.innerHTML += `
-                                <tr>
-                                    <td>${task.subject}</td>
+                                <tr class="task-row${task.is_delayed ? ' delayed delayed-list' : ''}">
+                                    <td class="${task.is_delayed ? ' delayed delayed-list' : ''}">
+                                        ${warningIcon}
+                                        ${task.subject}
+                                    </td>
                                     <td>${task.description || ""}</td>
                                     <td style="text-align: center;">${task.priority}</td>
                                     <td style="text-align: center;">${task.status}</td>
-                                    <td style="text-align: center;">${formatDeadline(task.deadline)}</td>
+                                    <td style="text-align: center;">
+                                        ${formatDeadline(task.deadline)}
+                                        ${task.is_delayed ? '<span class="delayed-badge">(Delayed)</span>' : ''}
+                                    </td>
                                     <td style="text-align: right;">
                                         <div class="dropdown">
                                             <button class="btn btn-link p-0 m-0 text-dark" type="button"
@@ -853,6 +921,30 @@
             });
         }
 
+        // Function to update calendar view
+        document.addEventListener('DOMContentLoaded', function() {
+            const prevBtn = document.getElementById('calendar-prev');
+            const nextBtn = document.getElementById('calendar-next');            
+            const currentYear = parseInt('{{ year }}', 10);
+            const currentMonth = parseInt('{{ month }}', 10);
+
+            prevBtn?.addEventListener('click', function() {
+                let y = currentYear, m = currentMonth - 1;
+                if (m < 1) {
+                    m = 12; y -= 1;
+                }
+                window.location.href = `?year=${y}&month=${m}&view=calendar`;
+            });
+
+            nextBtn?.addEventListener('click', function() {
+                let y = currentYear, m = currentMonth + 1;
+                if (m > 12) {
+                    m = 1; y += 1;
+                }
+                window.location.href = `?year=${y}&month=${m}&view=calendar`;
+            });
+        });
+
         // On login (DOM loaded), sync once immediately
         document.addEventListener('DOMContentLoaded', function() {
             syncEmails();
@@ -860,6 +952,15 @@
             reloadListView();
             reloadCalendarView();
             setInterval(syncEmails, 5 * 60 * 1000);
+
+            const view = getCurrentView();
+            if (view === "kanban") {
+                showBoard();
+            } else if (view === "list") {
+                showList();
+            } else if (view === "calendar") {
+                showCalendar();
+            }
         });
 
     </script>

@@ -225,19 +225,64 @@ def get_calendar_weeks(user, year, month):
 @login_required
 def index(request):
     query = request.GET.get("q", "")
-    base_qs = ExtractedTask.objects.filter(user=request.user).annotate(priority_rank=priority_order, status_rank=status_order)
+    base_qs = ExtractedTask.objects.filter(user=request.user).annotate(
+        priority_rank=priority_order, 
+        status_rank=status_order,
+        is_urgent=Case(
+            When(priority_rank=1, then=Value(True)),
+            default=Value(False),
+            output_field=IntegerField()),
+        is_urgent_and_delayed=Case(
+            When(priority_rank=1, is_delayed=True, then=Value(True)),
+            default=Value(False),
+            output_field=IntegerField()),)
 
     # For Task List View
     all_tasks = base_qs
     if query:
         all_tasks = all_tasks.filter(Q(subject__icontains=query) | Q(task_description__icontains=query))
-    all_tasks = all_tasks.order_by('priority_rank', 'deadline', 'status_rank')
-    active_tasks = all_tasks.exclude(status="Completed").order_by('priority_rank', 'deadline', 'status_rank')
+    all_tasks = all_tasks.order_by(
+        '-is_urgent_and_delayed',
+        '-is_delayed',
+        '-is_urgent',
+        'priority_rank', 
+        'deadline', 
+        'status_rank')
+    active_tasks = all_tasks.exclude(status="Completed").order_by(
+        '-is_urgent_and_delayed',
+        '-is_delayed',
+        '-is_urgent',
+        'priority_rank', 
+        'deadline', 
+        'status_rank')
 
     # For Kanban View
-    todo_tasks = base_qs.filter(status="Open").order_by('priority_rank', 'deadline', 'status_rank')
-    ongoing_tasks = base_qs.filter(status="Ongoing").order_by('priority_rank', 'deadline', 'status_rank')
-    completed_tasks = base_qs.filter(status="Completed").order_by('priority_rank', 'deadline', 'status_rank')
+    todo_tasks = base_qs.filter(status="Open").order_by(
+        '-is_urgent_and_delayed',
+        '-is_delayed',
+        '-is_urgent',
+        'priority_rank', 
+        'deadline', 
+        'status_rank')
+    
+    ongoing_tasks = base_qs.filter(status="Ongoing").order_by(
+        '-is_urgent_and_delayed',
+        '-is_delayed',
+        '-is_urgent',
+        'priority_rank', 
+        'deadline', 
+        'status_rank')
+    completed_tasks = base_qs.filter(status="Completed").order_by(
+        '-is_urgent_and_delayed',
+        '-is_delayed',
+        '-is_urgent',
+        'priority_rank', 
+        'deadline', 
+        'status_rank')
+    
+    for task in active_tasks:
+        task.is_delayed = task.deadline and task.deadline < timezone.localdate()
+        task.save(update_fields=['is_delayed'])
 
     # For Calendar View
     today = timezone.localtime(timezone.now())
@@ -749,7 +794,9 @@ def create_task(request):
             task.todo_list_id = todo_list_id
             task.save()
             messages.success(request, "Task added successfully!")
-            return redirect("dashboard")
+
+            view = request.POST.get("view", "kanban")
+            return redirect(f"/dashboard/?view={view}")
     else:
         return redirect("dashboard")
 
@@ -783,10 +830,28 @@ def edit_task(request, task_id):
                 logger.warning(f"Failed to sync To Do update for task {updated_task.todo_task_id}: {e}")
             updated_task.save()
             messages.success(request, "Task updated!")
-            return redirect("dashboard")
+
+            view = request.POST.get("view", "kanban")
+            return redirect(f"/dashboard/?view={view}")
     else:
         return redirect("dashboard")
+
+# View to delete a task
+@login_required
+@require_POST
+def delete_task(request, task_id):
+    task = ExtractedTask.objects.get(id=task_id, user=request.user)
+    # To Do task deletion
+    access_token = _get_graph_token(request)
     
+    if task.todo_task_id:
+        todo.delete_todo_task(access_token, task.todo_list_id, task.todo_task_id)
+    task.delete()
+    messages.success(request, "Task deleted.")
+    
+    view = request.POST.get("view", "kanban")
+    return redirect(f"/dashboard/?view={view}")
+
 # View to update the task status
 @csrf_exempt
 @login_required
@@ -824,10 +889,11 @@ def update_task_status(request):
             return JsonResponse({"success": False, "error": "Task not found"})
     return JsonResponse({"success": False, "error": "Invalid request"})
 
-# View to get all tasks in JSON format
+# View to get all tasks in JSON format at Kanban board
 @login_required
 def all_tasks_json(request):
     tasks = ExtractedTask.objects.filter(user=request.user)
+    priority_order = {"Urgent": 1, "Important": 2, "Medium": 3, "Low": 4}
     result = []
     for t in tasks:
         result.append({
@@ -838,22 +904,30 @@ def all_tasks_json(request):
             "status": t.status,
             "deadline": t.deadline.strftime('%Y-%m-%d') if t.deadline else None,
             "web_link": t.email.web_link if t.email else "",
+            "is_delayed": t.is_delayed,
+            
         })
-    return JsonResponse({"tasks": result})
 
-# View to delete a task
-@login_required
-@require_POST
-def delete_task(request, task_id):
-    task = ExtractedTask.objects.get(id=task_id, user=request.user)
-    # To Do task deletion
-    access_token = _get_graph_token(request)
-    
-    if task.todo_task_id:
-        todo.delete_todo_task(access_token, task.todo_list_id, task.todo_task_id)
-    task.delete()
-    messages.success(request, "Task deleted.")
-    return redirect("dashboard")
+    def sort_key(x):
+        priority = x["priority"] or "Medium"
+        is_urgent = priority.lower() == "urgent"
+        is_delayed = x["is_delayed"]
+        # Sort order:
+        # 1. Urgent & Delayed
+        # 2. Delayed
+        # 3. Urgent
+        # 4. Priority (Important > Medium > Low)
+        # 5. Earliest Deadline
+        return (
+            -(is_urgent and is_delayed),      # True (1) sorts before False (0)
+            -bool(is_delayed),                # Delayed next
+            -is_urgent,                       # Urgent next
+            priority_order.get(priority, 5),  # Then by priority value
+            x["deadline"] or "9999-12-31",    # Earliest deadline first
+        )
+
+    result.sort(key=sort_key)
+    return JsonResponse({"tasks": result})
 
 # View to delete all completed tasks
 @require_POST

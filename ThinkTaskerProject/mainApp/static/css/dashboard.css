@@ -205,20 +205,6 @@ body {
     transition: box-shadow 0.15s;
 }
 
-/* Day rings for busy/full */
-/* .calendar-day-ring-full .calendar-day-number {
-    border: 2.5px solid #e57373;
-    background: #e57373;
-}
-.calendar-day-ring-busy .calendar-day-number {
-    border: 2px solid #ffb74d;
-    background: #ffb74d;
-}
-.calendar-day-dot-free .calendar-day-number {
-    border: 2px solid #81c784;
-    background: #81c784;
-} */
-
 .calendar-task-badge {
     position: absolute;
     top: 6px;
@@ -280,14 +266,14 @@ body {
 }
 
 /* Calendar Table Columns */
-.calendar-col-sml { width: 10%; }
+.calendar-col-sml { width: w0%; }
 .calendar-col { width: 16%; }
 
 /* Calendar Table Data */
 .calendar-td {
     padding: 0 !important;
     border: 0 !important;
-    height: 100px;
+    height: 110px;
     vertical-align: middle !important;
     position: relative;
     background: #fff;
@@ -313,6 +299,13 @@ body {
     .calendar-day { min-width: 35px; min-height: 40px; font-size: 0.9em; }
 }
 
+.calendar-arrow {
+    background: none;
+    border: none;
+    outline: none;
+    padding: 0 20px;
+}
+
 .clear-completed-btn {
     position: relative;
     overflow: hidden;
@@ -335,4 +328,26 @@ body {
     opacity: 1;
     width: auto;
     margin-left: 0.5em;
+}
+
+.task-card.delayed {
+    border: 2px solid #e53935;
+    background-color: #ffebee;
+}
+
+.delayed-badge {
+    color: #e53935;
+    font-weight: bold;
+    margin-left: 8px;
+}
+
+.task-row.delayed {
+    border-left: 4px solid #e53935;
+    background-color: #ffebee;
+    color: #e53935;
+}
+
+.delayed-list {
+    color: #e53935 !important;
+    font-weight: bold !important;
 }
