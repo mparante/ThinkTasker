@@ -266,7 +266,7 @@ body {
 }
 
 /* Calendar Table Columns */
-.calendar-col-sml { width: w0%; }
+.calendar-col-sml { width: 10%; }
 .calendar-col { width: 16%; }
 
 /* Calendar Table Data */
