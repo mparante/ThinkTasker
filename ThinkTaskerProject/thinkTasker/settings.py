@@ -11,22 +11,24 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import os
+import os, environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Initialise environment variables
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@=1^b9=^ii0q_^d@3p8&s1@qdr*#jh#hc4$prkutz+kqf+2=lh'
+SECRET_KEY = env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+DEBUG = env.bool('DEBUG', default=False)
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
 
 
 # Application definition
@@ -125,11 +127,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Azure AD / Microsoft Graph settings
-GRAPH_TENANT_ID     = "79ccab09-2e72-4d04-b1cb-73e545129843"
-GRAPH_CLIENT_ID     = "2128f7a1-0646-4768-978c-a43b8f0a6453"
-GRAPH_CLIENT_SECRET = ".B28Q~TWsNsp4yauHcUP0l_knx.UIQYkOWwzjc8Z"
-GRAPH_REDIRECT_URI = "http://localhost:8000/graph/callback/"
-GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
+GRAPH_TENANT_ID     = env('GRAPH_TENANT_ID')
+GRAPH_CLIENT_ID     = env('GRAPH_CLIENT_ID')
+GRAPH_CLIENT_SECRET = env('GRAPH_CLIENT_SECRET')
+GRAPH_REDIRECT_URI  = env('GRAPH_REDIRECT_URI')
+GRAPH_AUTHORITY     = env('GRAPH_AUTHORITY')
 GRAPH_SCOPE = [
     "User.Read",
     "User.Read.All",
@@ -144,7 +146,7 @@ GRAPH_SCOPE = [
 
 AUTH_USER_MODEL = 'mainApp.ThinkTaskerUser'
 LOGIN_URL = '/login'
-LOGIN_REDIRECT_URL = '/login'
+LOGIN_REDIRECT_URL = '/login/'
 LOGOUT_REDIRECT_URL = '/login'
 
 TIME_ZONE = 'Asia/Tokyo'
@@ -194,5 +196,5 @@ LOGGING = {
     },
 }
 
-HF_TOKEN = "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"
-HUGGINGFACEHUB_API_TOKEN = "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"
+HF_TOKEN = env('HF_TOKEN')
+HUGGINGFACEHUB_API_TOKEN = env('HUGGINGFACEHUB_API_TOKEN')
