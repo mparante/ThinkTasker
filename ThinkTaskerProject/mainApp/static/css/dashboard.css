@@ -351,3 +351,29 @@ body {
     color: #e53935 !important;
     font-weight: bold !important;
 }
+
+#syncOverlay {
+    display: none; 
+    position: fixed;
+    z-index: 99999;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(245, 248, 250, 0.96);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    backdrop-filter: blur(1.5px);
+}
+
+.sync-card {
+    border-radius: 2rem !important;
+    min-width: 340px;
+    text-align: center;
+}
+
+.sync-progress {
+    height: 10px;
+    border-radius: 1rem;
+    overflow: hidden;
+}

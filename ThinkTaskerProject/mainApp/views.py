@@ -146,6 +146,7 @@ def graph_callback(request):
 
         try:
             user = ThinkTaskerUser.objects.get(email=email)
+            user.refresh_from_db() # Refresh user from DB on login callback when registering --force reload
             if not user.is_approved:
                 messages.error(request, "Your account is not approved by admin yet.")
                 return redirect("login")
@@ -224,6 +225,12 @@ def get_calendar_weeks(user, year, month):
 # View for the main dashboard
 @login_required
 def index(request):
+    user = ThinkTaskerUser.objects.get(pk=request.user.pk)
+    needs_first_sync = not bool(user.last_synced_datetime)
+    #Logging
+    print("last_synced_datetime =", user.last_synced_datetime)
+    print("needs_first_sync =", needs_first_sync)
+
     query = request.GET.get("q", "")
     base_qs = ExtractedTask.objects.filter(user=request.user).annotate(
         priority_rank=priority_order, 
@@ -292,6 +299,8 @@ def index(request):
     has_tasks = any(any(day['task_count'] > 0 for day in week) for week in calendar_weeks)
 
     return render(request, "dashboard.html", {
+        # For Sync Status
+        'needs_first_sync': needs_first_sync,
         # For Kanban View
         "todo_tasks": todo_tasks,
         "ongoing_tasks": ongoing_tasks,
@@ -668,6 +677,7 @@ def sync_emails_view(request):
         score = alpha * tfidf_norm + beta * cf_norm
 
         extracted_deadline = extract_deadline(full_body, sent_date=received_datetime)
+        extracted_deadline_date = None
         if extracted_deadline:
             extracted_deadline_date = datetime.strptime(extracted_deadline, "%Y-%m-%d").date()
             days_from_now = (extracted_deadline_date - now).days

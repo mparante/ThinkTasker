@@ -12,6 +12,26 @@
     <link rel="icon" href="{% static 'favicon.ico' %}" type="image/x-icon">
 </head>
 <body>
+    <!-- Spinner Implementation -->
+    <script>
+      const needsFirstSync = {{ needs_first_sync|yesno:"true,false" }};
+    </script>
+    <div id="syncOverlay">
+        <div class="sync-card card shadow-lg p-4 border-0">
+            <div class="mb-3">
+                <div class="spinner-border text-primary mb-2" role="status" style="width:2.5rem; height:2.5rem;"></div>
+            </div>
+            <div class="fw-bold fs-5 mb-2">Almost there…</div>
+            <div class="mb-3 text-secondary">
+            Importing your tasks for the first time.<br>
+            Please don’t close this page.
+            </div>
+            <div class="progress sync-progress">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 100%"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- HEADER with Toggle + Profile Dropdown -->
     <header class="d-flex justify-content-between align-items-center px-4 py-3 bg-white shadow-sm">
         <div class="btn-group" role="group" aria-label="View toggle">
@@ -172,10 +192,15 @@
                 
                 <!-- Completed Column -->
                 <div class="kanban-column column" id="completed" ondragover="allowDrop(event)" ondrop="drop(event, 'completed')">
-                    <h3 class="mx-auto mb-0" style="flex:1; text-align:center;">Completed</h3>
-                        <button class="btn btn-sm btn-danger clear-completed-btn ms-auto" onclick="clearCompletedTasks()" title="Clear All Completed">
-                                <i class="bi bi-trash"></i><span class="clear-text">Clear</span>
-                        </button>
+                    <div class="d-flex align-items-center mb-2" style="position: relative;">
+                            <h3 class="mx-auto mb-0" style="flex:1; text-align:center;">Completed</h3>
+                            <button class="btn btn-sm btn-danger clear-completed-btn ms-auto" 
+                                onclick="clearCompletedTasks()" 
+                                title="Clear All Completed">
+                                <i class="bi bi-trash"></i>
+                                <span class="clear-text">Clear</span>
+                            </button>
+                    </div>
                     {% for task in completed_tasks %}
                         <div class="task-card completed" id="task-{{ task.id }}" draggable="false">
                             <h5 class="text-decoration-line-through text-muted">
@@ -564,7 +589,7 @@
                 document.getElementById("last-sync-text_kanban").textContent = "Syncing…";
                 document.getElementById("last-sync-text_list").textContent = "Syncing…";
             }
-            fetch('/emails/sync/')
+            return fetch('/emails/sync/')
             .then(response => { 
                 // This will handle the response status codes
                 if (response.status === 401 || response.status === 403) {
@@ -601,6 +626,7 @@
                     reloadListView();
                     reloadCalendarView();
                 }
+                console.log('syncEmails: completed, resolving promise');
             })
             .catch(err => {
                 document.getElementById("last-sync-text_kanban").textContent = "Sync failed";
@@ -947,19 +973,28 @@
 
         // On login (DOM loaded), sync once immediately
         document.addEventListener('DOMContentLoaded', function() {
-            syncEmails();
-            reloadKanbanBoard();
-            reloadListView();
-            reloadCalendarView();
-            setInterval(syncEmails, 5 * 60 * 1000);
+            if (typeof needsFirstSync !== "undefined" && needsFirstSync) {
+                document.getElementById('syncOverlay').style.display = "flex";
+                syncEmails(false).then(() => {
+                    document.getElementById('syncOverlay').style.display = "none";
+                    window.location.reload();
+                });
+            } else {                
+                document.getElementById('syncOverlay').style.display = "none";
+                syncEmails();
+                reloadKanbanBoard();
+                reloadListView();
+                reloadCalendarView();
+                setInterval(syncEmails, 5 * 60 * 1000);
 
-            const view = getCurrentView();
-            if (view === "kanban") {
-                showBoard();
-            } else if (view === "list") {
-                showList();
-            } else if (view === "calendar") {
-                showCalendar();
+                const view = getCurrentView();
+                if (view === "kanban") {
+                    showBoard();
+                } else if (view === "list") {
+                    showList();
+                } else if (view === "calendar") {
+                    showCalendar();
+                }
             }
         });
 

@@ -7,7 +7,7 @@ admin.site.register(ProcessedEmail)
 
 @admin.register(ThinkTaskerUser)
 class ThinkTaskerUserAdmin(admin.ModelAdmin):
-    list_display = ('username', 'email', 'first_name', 'last_name', 'department', 'is_approved', 'is_active')
+    list_display = ('username', 'email', 'first_name', 'last_name', 'department', 'is_approved', 'is_active', 'last_synced_datetime')
     list_filter = ('is_approved', 'is_active', 'department')
     search_fields = ('email', 'username', 'first_name', 'last_name', 'department')
 
