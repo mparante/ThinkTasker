@@ -752,7 +752,7 @@ def sync_emails_view(request):
                 user=user,
                 email=pe,
                 subject=task["subject"],
-                task_description=task_description.extract_task_from_email(clean_email_text(task["body"])),
+                task_description=task_description.extract_task_from_email(task["body"]),
                 actionable_patterns=task["actionable_patterns"],
                 priority=task["priority"],
                 deadline=task["deadline"],
