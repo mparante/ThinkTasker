@@ -82,8 +82,8 @@ class ExtractedTask(models.Model):
     status = models.CharField(max_length=32, default="Open")
     created_at = models.DateTimeField(auto_now_add=True)
     is_delayed = models.BooleanField(default=False)
-    todo_task_id = models.CharField(max_length=128, blank=True, null=True)
-    todo_list_id = models.CharField(max_length=128, blank=True, null=True)
+    todo_task_id = models.CharField(max_length=256, blank=True, null=True)
+    todo_list_id = models.CharField(max_length=256, blank=True, null=True)
 
     def __str__(self):
         email_subject = self.email.subject if self.email else "No Subject"

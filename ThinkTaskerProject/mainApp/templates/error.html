@@ -1,14 +1,19 @@
-{% extends "base_generic.html" %}
 {% load static %}
 
-{% block head %}
-  {{ block.super }}
-{% endblock %}
-
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Error | ThinkTasker</title>
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/login.css' %}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
   <div class="error-box">
     <h1>Something went wrong</h1>
     <p>{{ message }}</p>
     <a href="{% url 'login' %}">Back to Login</a>
   </div>
-{% endblock %}
+</body>
+</html>

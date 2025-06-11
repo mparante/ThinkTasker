@@ -1,9 +1,11 @@
 from django.urls import path
 from django.contrib.auth.views import LogoutView
+from django.views.generic.base import RedirectView
 from . import views
 
 urlpatterns = [
     # Auth and profile
+    path("", RedirectView.as_view(url="/login/", permanent=False)),
     path("login/", views.login_view, name="login"),
     path("dashboard/", views.index, name="dashboard"),
     path("register/", views.register, name="register"),

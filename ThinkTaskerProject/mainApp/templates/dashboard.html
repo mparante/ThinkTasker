@@ -774,11 +774,6 @@
                     const allTbody = table.getElementsByTagName("tbody")[0]; // active tasks
                     const completedCollapse = document.getElementById("completedTasksCollapse"); // completed
 
-                    const isUrgent = task.priority && task.priority.toLowerCase() === "urgent";
-                    const warningIcon = (isUrgent && task.is_delayed)
-                        ? '<span class="ms-2 text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>'
-                        : '';
-
                     allTbody.innerHTML = "";
                     completedCollapse.innerHTML = "";
 
@@ -796,6 +791,10 @@
                             </tr>`;
                     } else {
                         activeTasks.forEach(task => {
+                            const isUrgent = task.priority && task.priority.toLowerCase() === "urgent";
+                            const warningIcon = (isUrgent && task.is_delayed)
+                                ? '<span class="ms-2 text-danger"><i class="bi bi-exclamation-triangle-fill"></i></span>'
+                                : '';
                             allTbody.innerHTML += `
                                 <tr class="task-row${task.is_delayed ? ' delayed delayed-list' : ''}">
                                     <td class="${task.is_delayed ? ' delayed delayed-list' : ''}">

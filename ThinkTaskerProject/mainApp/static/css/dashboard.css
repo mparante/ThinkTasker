@@ -349,7 +349,7 @@ body {
 
 .delayed-list {
     color: #e53935 !important;
-    font-weight: bold !important;
+    /* font-weight: bold !important; */
 }
 
 #syncOverlay {
