@@ -676,6 +676,12 @@ def sync_emails_view(request):
         alpha, beta = 0.7, 0.3
         score = alpha * tfidf_norm + beta * cf_norm
 
+        # Log the intermediate results
+        logger.info(f"TF-IDF Normalized: {tfidf_norm:.4f}")
+        logger.info(f"CF Normalized: {cf_norm:.4f}")
+        logger.info(f"Alpha: {alpha}, Beta: {beta}")
+        logger.info(f"Final Priority Score (St): {score:.4f}")
+
         extracted_deadline = extract_deadline(full_body, sent_date=received_datetime)
         extracted_deadline_date = None
         if extracted_deadline:
@@ -808,7 +814,9 @@ def create_task(request):
             view = request.POST.get("view", "kanban")
             return redirect(f"/dashboard/?view={view}")
     else:
+        messages.error(request, "Invalid form data.")
         return redirect("dashboard")
+    return redirect("dashboard")
 
 # View to edit an existing task
 @login_required
